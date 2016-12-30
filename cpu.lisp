@@ -5,6 +5,7 @@
 
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
+(defconstant bios-begin-address-kseg1 #xBFC00000)
 
 (defstruct cpu
   "A model PSX cpu"
@@ -14,6 +15,13 @@
    :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32)))
+
+(declaim (ftype (function (cpu) cpu) power-on))
+(defun power-on (cpu)
+  "Sets the cpu to the initial power up state."
+  ; TODO(Samantha): Fully implement.
+  (setf (cpu-program-counter cpu) bios-begin-address-kseg1)
+  cpu)
 
 (defstruct instruction
   "PSX instruction"
