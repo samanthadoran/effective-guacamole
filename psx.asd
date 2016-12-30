@@ -1,4 +1,5 @@
 (in-package #:asdf-user)
 
 (defsystem #:psx
-  :components ((:file "cpu")))
+  :components ((:file "cpu")
+               (:file "console" :depends-on ("cpu"))))
