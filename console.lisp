@@ -10,5 +10,5 @@
   "A model psx"
   (cpu (psx-cpu:make-cpu) :type psx-cpu::cpu)
   (bios-rom
-   (make-array #x7D000 :element-type '(unsigned-byte 8) :initial-element 0)
-   :type (simple-array (unsigned-byte 8) (#x7D000))))
+   (make-array #x8000 :element-type '(unsigned-byte 8) :initial-element 0)
+   :type (simple-array (unsigned-byte 8) (#x8000))))
