@@ -36,3 +36,9 @@
      (aref (psx-bios-rom psx) (- address bios-begin-address-kseg1)))
     ; Unimplemented.
     (t (progn (format t "Reads to 0x~X are unimplemented~%" address) 0))))
+
+(declaim (ftype (function (psx) function) map-memory))
+(defun map-memory (psx)
+  (setf
+   (psx-cpu:cpu-memory-get (psx-cpu psx))
+   (lambda (address) (load-byte psx address))))
