@@ -27,8 +27,6 @@
                 load-byte))
 (defun load-byte (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
-  (format t "Segment of address 0x~X is ~A~%"
-          address (determine-segment address))
   (cond
     ; BIOS
     ((in-range bios-begin-address-kseg1

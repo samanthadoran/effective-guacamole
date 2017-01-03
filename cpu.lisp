@@ -27,7 +27,22 @@
 
 (defstruct instruction
   "PSX instruction"
-  (word 0 :type (unsigned-byte 32)))
+  (word 0 :type (unsigned-byte 32))
+  (address 0 :type (unsigned-byte 32))
+  (segment :invalid :type keyword)
+  (operation
+   (lambda (cpu instruction)
+           (declare (ignore cpu instruction))
+           (values))
+   :type (function (cpu instruction)))
+  (mnemonic "" :type string))
+
+(defun instruction-information (instruction)
+  (format nil "~A (0x~X) at 0x~X (segment: ~A)"
+          (instruction-mnemonic instruction)
+          (instruction-word instruction)
+          (instruction-address instruction)
+          (instruction-segment instruction)))
 
 (declaim (ftype (function ((unsigned-byte 64)) (unsigned-byte 32))
                 wrap-word))
@@ -61,27 +76,29 @@
   ; TODO(Samantha): Implement.
   (read-cpu-word cpu (cpu-program-counter cpu)))
 
-(declaim (ftype (function ((unsigned-byte 32)) instruction) decode))
-(defun decode (instruction-as-word)
+(declaim (ftype (function (cpu (unsigned-byte 32)) instruction) decode))
+(defun decode (cpu instruction-as-word)
   "Transforms a 32 bit word into an executable instruction."
   ; TODO(Samantha): Implement.
-  (make-instruction :word instruction-as-word))
+  (make-instruction
+   :word instruction-as-word
+   :address (cpu-program-counter cpu)
+   :mnemonic "Unrecognized Instruction"))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)
   "Executes a single instruction and returns the number of cycles that this
    took."
+  (declare (ignore cpu))
   ; TODO(Samantha): Implement.
-  (format t "Current instruction word is: 0x~X~%
-             Current program counter is: 0x~X~%"
-          (instruction-word instruction) (cpu-program-counter cpu))
+  (print (instruction-information instruction))
   0)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
 (defun step-cpu (cpu)
   "Steps the cpu through a single fetch decode execute cycle, returning the
    number of cycles it took."
-  (let ((instruction (decode (fetch cpu))))
+  (let ((instruction (decode cpu (fetch cpu))))
     (setf (cpu-program-counter cpu)
           (wrap-word (+ 4 (cpu-program-counter cpu))))
     (execute cpu instruction)))
