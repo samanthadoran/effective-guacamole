@@ -23,7 +23,8 @@
     ((in-range kseg1-base mirror-size address) :kseg1)
     (t :invalid-segment)))
 
-(declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8)) load-byte))
+(declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8))
+                load-byte))
 (defun load-byte (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
   (format t "Segment of address 0x~X is ~A~%"

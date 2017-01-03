@@ -15,7 +15,8 @@
 
 (defun load-rom-from-file (filepath)
   (with-open-file (stream filepath :element-type '(unsigned-byte 8))
-    (let ((rom (make-array (file-length stream) :element-type '(unsigned-byte 8))))
+    (let ((rom (make-array (file-length stream)
+                           :element-type '(unsigned-byte 8))))
       (read-sequence rom stream)
       rom)))
 
