@@ -1,7 +1,7 @@
 (defpackage #:psx-console
   (:nicknames #:psx)
   (:use :cl :psx-cpu)
-  (:export #:make-psx #:load-rom-from-file))
+  (:export #:make-psx #:load-rom-from-file #:console-on))
 
 (in-package :psx-console)
 (declaim (optimize (speed 3) (safety 1)))
@@ -20,8 +20,9 @@
       (read-sequence rom stream)
       rom)))
 
-(declaim (ftype (function (psx)) console-on))
-(defun console-on (psx)
+(declaim (ftype (function (psx pathname)) console-on))
+(defun console-on (psx bios-rom-path)
+  (setf (psx-bios-rom psx) (load-rom-from-file bios-rom-path))
   (psx-cpu:power-on (psx-cpu psx))
   (map-memory psx)
   (values))
