@@ -35,10 +35,40 @@
            (declare (ignore cpu instruction))
            (values))
    :type (function (cpu instruction)))
-  (mnemonic "" :type string))
+  (mnemonic "" :type string)
+  (operation-code 0 :type (unsigned-byte 6))
+  (source-register 0 :type (unsigned-byte 5))
+  (target-register 0 :type (unsigned-byte 5))
+  (immediate-value 0 :type (unsigned-byte 16))
+  (jump-target 0 :type (unsigned-byte 26))
+  (destination-register 0 :type (unsigned-byte 5))
+  (shift-amount 0 :type (unsigned-byte 5))
+  (secondary-operation-code 0 :type (unsigned-byte 6)))
 
+; TODO(Samantha): Move the following constants and two functions out to a
+; separate file so that we don't have multiple copies in the codebase.
+(defconstant mirror-size #x20000000)
+(defconstant kuseg-base #x00000000)
+(defconstant kseg0-base #x80000000)
+(defconstant kseg1-base #xA0000000)
+(declaim (ftype (function ((unsigned-byte 32)
+                           (unsigned-byte 32)
+                           (unsigned-byte 32))
+                          boolean) in-range))
+(defun in-range (base size place)
+  (and (>= place base) (< place (+ base size))))
+
+(declaim (ftype (function ((unsigned-byte 32)) keyword) determine-segment))
+(defun determine-segment (address)
+  (cond
+    ((in-range kuseg-base mirror-size address) :kuseg)
+    ((in-range kseg0-base mirror-size address) :kseg0)
+    ((in-range kseg1-base mirror-size address) :kseg1)
+    (t :invalid-segment)))
+
+(declaim (ftype (function (instruction) string) instruction-information))
 (defun instruction-information (instruction)
-  (format nil "~A (0x~X) at 0x~X (segment: ~A)"
+  (format nil "~A (0x~8,'0X) at 0x~8,'0X (segment: ~A)"
           (instruction-mnemonic instruction)
           (instruction-word instruction)
           (instruction-address instruction)
@@ -82,8 +112,17 @@
   ; TODO(Samantha): Implement.
   (make-instruction
    :word instruction-as-word
+   :segment (determine-segment (cpu-program-counter cpu))
    :address (cpu-program-counter cpu)
-   :mnemonic "Unrecognized Instruction"))
+   :mnemonic "Unrecognized Instruction"
+   :operation-code (ldb (byte 6 26) instruction-as-word)
+   :source-register (ldb (byte 5 21) instruction-as-word)
+   :target-register (ldb (byte 5 16) instruction-as-word)
+   :immediate-value (ldb (byte 16 0) instruction-as-word)
+   :jump-target (ldb (byte 26 0) instruction-as-word)
+   :destination-register (ldb (byte 5 11) instruction-as-word)
+   :shift-amount (ldb (byte 5 6) instruction-as-word)
+   :secondary-operation-code (ldb (byte 6 0) instruction-as-word)))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)
