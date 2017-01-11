@@ -7,6 +7,8 @@
 (declaim (optimize (speed 3) (safety 1)))
 (defconstant bios-begin-address-kseg1 #xBFC00000)
 
+(defvar instructions (make-hash-table :test 'equal))
+
 (defstruct cpu
   "A model PSX cpu"
   (program-counter 0 :type (unsigned-byte 32))
@@ -34,7 +36,7 @@
    (lambda (cpu instruction)
            (declare (ignore cpu instruction))
            (values))
-   :type (function (cpu instruction)))
+   :type (function (cpu instruction) (values &optional)))
   (mnemonic "" :type string)
   (operation-code 0 :type (unsigned-byte 6))
   (source-register 0 :type (unsigned-byte 5))
@@ -110,19 +112,29 @@
 (defun decode (cpu instruction-as-word)
   "Transforms a 32 bit word into an executable instruction."
   ; TODO(Samantha): Implement.
-  (make-instruction
-   :word instruction-as-word
-   :segment (determine-segment (cpu-program-counter cpu))
-   :address (cpu-program-counter cpu)
-   :mnemonic "Unrecognized Instruction"
-   :operation-code (ldb (byte 6 26) instruction-as-word)
-   :source-register (ldb (byte 5 21) instruction-as-word)
-   :target-register (ldb (byte 5 16) instruction-as-word)
-   :immediate-value (ldb (byte 16 0) instruction-as-word)
-   :jump-target (ldb (byte 26 0) instruction-as-word)
-   :destination-register (ldb (byte 5 11) instruction-as-word)
-   :shift-amount (ldb (byte 5 6) instruction-as-word)
-   :secondary-operation-code (ldb (byte 6 0) instruction-as-word)))
+  (let ((masked-opcode
+         (if (ldb-test (byte 6 26) instruction-as-word)
+           (ldb (byte 6 26) instruction-as-word)
+           (logior #xFF00 (ldb (byte 6 0) instruction-as-word)))))
+    (make-instruction
+     :word instruction-as-word
+     :segment (determine-segment (cpu-program-counter cpu))
+     ; If this instruction isn't in our list, make a dummy.
+     :operation (or (cadr (gethash masked-opcode instructions))
+                    (lambda (cpu instruction)
+                            (declare (ignore cpu instruction))
+                            (values)))
+     :address (cpu-program-counter cpu)
+     ; If this instruction isn't in our list, it's illegal!
+     :mnemonic (or (car (gethash masked-opcode instructions)) "Illegal Instruction!")
+     :operation-code (ldb (byte 6 26) instruction-as-word)
+     :source-register (ldb (byte 5 21) instruction-as-word)
+     :target-register (ldb (byte 5 16) instruction-as-word)
+     :immediate-value (ldb (byte 16 0) instruction-as-word)
+     :jump-target (ldb (byte 26 0) instruction-as-word)
+     :destination-register (ldb (byte 5 11) instruction-as-word)
+     :shift-amount (ldb (byte 5 6) instruction-as-word)
+     :secondary-operation-code (ldb (byte 6 0) instruction-as-word))))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)
