@@ -1,9 +1,7 @@
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
 
-(declaim (ftype (function (cpu instruction) (values &optional)) lui))
-(defun lui (cpu instruction)
+(def-i-type lui #x0F
   (setf
-   (aref (cpu-registers cpu) (instruction-target-register instruction))
-   (ash (instruction-immediate-value instruction) 16))
-  (values))
+   (aref (cpu-registers cpu) target-register)
+   (ash immediate 16)))

@@ -1,8 +1,10 @@
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
 
-;Regulars
-;(setf (gethash #x01 instructions) (list "" #'b)-cond-z)
+; TODO(Samantha): Remove all of this to use new instruction macros.
+
+; Regulars
+; (setf (gethash #x01 instructions) (list "" #'b)-cond-z)
 ; (setf (gethash #x02 instructions) (list "j" #'j))
 ; (setf (gethash #x03 instructions) (list "jal" #'jal))
 ; (setf (gethash #x04 instructions) (list "beq" #'beq))
@@ -16,7 +18,7 @@
 ; (setf (gethash #x0C instructions) (list "andi" #'andi))
 ; (setf (gethash #x0D instructions) (list "ori" #'ori))
 ; (setf (gethash #x0E instructions) (list "xori" #'xori))
-(setf (gethash #x0F instructions) (list "lui" #'lui))
+; (setf (gethash #x0F instructions) (list "lui" #'lui))
 ; (setf (gethash #x10 instructions) (list "cop0" #'cop0))
 ; (setf (gethash #x11 instructions) (list "cop1" #'cop1))
 ; (setf (gethash #x12 instructions) (list "cop2" #'cop2))
