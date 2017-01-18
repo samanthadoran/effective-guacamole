@@ -20,6 +20,7 @@
      (let ((source-register (instruction-source-register instruction))
            (target-register (instruction-target-register instruction))
            (immediate (instruction-immediate-value instruction)))
+       (declare (ignorable source-register target-register immediate))
        ,@body)))
 
 ; (defmacro def-j-type (name opcode &body body)
