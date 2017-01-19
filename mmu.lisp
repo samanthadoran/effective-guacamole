@@ -24,8 +24,8 @@
     (t :invalid-segment)))
 
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8))
-                load-byte))
-(defun load-byte (psx address)
+                load-byte*))
+(defun load-byte* (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
   (cond
     ; BIOS
@@ -34,10 +34,23 @@
                address)
      (aref (psx-bios-rom psx) (- address bios-begin-address-kseg1)))
     ; Unimplemented.
-    (t (progn (format t "Reads to 0x~X are unimplemented~%" address) 0))))
+    (t (progn (format t "Reads to 0x~8,'0X are unimplemented~%" address) 0))))
+
+; TODO(Samantha): Figure out a way to fix this shadowing.
+(declaim
+ (ftype (function (psx (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
+        write-byte*))
+(defun write-byte* (psx address value)
+  (declare (ignore psx))
+  (cond
+    ; Unimplemented.
+    (t (progn (format t "Writes to 0x~8,'0X are unimplemented!~%" address) value))))
 
 (declaim (ftype (function (psx) function) map-memory))
 (defun map-memory (psx)
   (setf
    (psx-cpu:cpu-memory-get (psx-cpu psx))
-   (lambda (address) (load-byte psx address))))
+   (lambda (address) (load-byte* psx address)))
+  (setf
+   (psx-cpu:cpu-memory-set (psx-cpu psx))
+   (lambda (address value) (write-byte* psx address value))))

@@ -1,7 +1,9 @@
 (defpackage #:psx-cpu
   (:nicknames #:cpu)
   (:use :cl)
-  (:export #:cpu #:make-cpu #:cpu-memory-get #:power-on #:step-cpu))
+  (:export #:cpu #:make-cpu
+           #:cpu-memory-get #:cpu-memory-set
+           #:power-on #:step-cpu))
 
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
@@ -19,7 +21,10 @@
   (lo 0 :type (unsigned-byte 32))
   (memory-get
    (lambda (address) (declare (ignore address)) 0)
-   :type (function ((unsigned-byte 32)) (unsigned-byte 8))))
+   :type (function ((unsigned-byte 32)) (unsigned-byte 8)))
+  (memory-set
+   (lambda (address value) (declare (ignore address value)) 0)
+   :type (function ((unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))))
 
 (declaim (ftype (function (cpu) (unsigned-byte 32)) power-on))
 (defun power-on (cpu)
@@ -76,6 +81,14 @@
           (instruction-address instruction)
           (instruction-segment instruction)))
 
+(declaim (ftype (function ((unsigned-byte 16)) (signed-byte 32))
+                to-signed-byte-32))
+(defun to-signed-byte-32 (to-be-extended)
+  ; If the MSB is set, do the inversions.
+  (if (ldb-test (byte 1 15) to-be-extended)
+    (* (the (signed-byte 32) -1) (logand #xFFFF (1+ (lognot to-be-extended))))
+    to-be-extended))
+
 (declaim (ftype (function ((unsigned-byte 64)) (unsigned-byte 32))
                 wrap-word))
 (defun wrap-word (to-be-wrapped)
@@ -88,6 +101,11 @@
 (defun read-cpu (cpu address)
   (funcall (cpu-memory-get cpu) address))
 
+(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
+                write-cpu))
+(defun write-cpu (cpu address value)
+  (funcall (cpu-memory-set cpu) address value))
+
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 16))
                 read-cpu-half-word))
 (defun read-cpu-half-word (cpu address)
@@ -95,12 +113,29 @@
         (hi (read-cpu cpu (wrap-word (1+ address)))))
     (logior (ash hi 8) lo)))
 
+(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16))
+                write-cpu-half-word))
+(defun write-cpu-half-word (cpu address value)
+  (let ((lo (ldb (byte 8 0) value))
+        (hi (ldb (byte 8 8) value)))
+    (write-cpu cpu address lo)
+    (write-cpu cpu (wrap-word (1+ address)) hi)
+    value))
+
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))
                 read-cpu-word))
 (defun read-cpu-word (cpu address)
   (let ((lo (read-cpu-half-word cpu address))
         (hi (read-cpu-half-word cpu (wrap-word (+ 2 address)))))
     (logior (ash hi 16) lo)))
+
+(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))
+                write-cpu-word))
+(defun write-cpu-word (cpu address value)
+  (let ((lo (ldb (byte 16 0) value))
+        (hi (ldb (byte 16 16) value)))
+    (write-cpu-half-word cpu address lo)
+    (write-cpu-half-word cpu (wrap-word (+ 2 address)) hi)))
 
 (declaim (ftype (function (cpu) (unsigned-byte 32)) fetch))
 (defun fetch (cpu)
@@ -140,9 +175,13 @@
 (defun execute (cpu instruction)
   "Executes a single instruction and returns the number of cycles that this
    took."
-  (declare (ignore cpu))
   ; TODO(Samantha): Implement.
-  (print (instruction-information instruction))
+  (funcall (instruction-operation instruction) cpu instruction)
+  (format t "~A~%" (instruction-information instruction))
+  (format t "Masked opcode is 0x~8,'0X~%"
+          (if (ldb-test (byte 6 26) (instruction-word instruction))
+            (ldb (byte 6 26) (instruction-word instruction))
+            (logior #xFF00 (ldb (byte 6 0) (instruction-word instruction)))))
   0)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
