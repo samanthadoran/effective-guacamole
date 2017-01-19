@@ -30,11 +30,14 @@
 ;     (let ((jump-target (instruction-jump-target instruction)))
 ;       ,@body)))
 ;
-; (defmacro def-r-type (name opcode &body body)
-;   `(def-instruction
-;      ,name
-;      ,opcode
-;      (let ((source-register (instruction-source-register instruction))
-;            (target-register (instruction-target-register instruction))
-;            (destination-register (instruction-destination-register instruction)))
-;        ,@body)))
+(defmacro def-r-type (name opcode &body body)
+  `(def-instruction
+     ,name
+     ,opcode
+     (let ((source-register (instruction-source-register instruction))
+           (target-register (instruction-target-register instruction))
+           (destination-register (instruction-destination-register instruction))
+           (shift-amount (instruction-shift-amount instruction)))
+       (declare (ignorable source-register target-register
+                           destination-register shift-amount))
+       ,@body)))

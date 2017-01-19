@@ -5,3 +5,8 @@
   (setf
    (aref (cpu-registers cpu) target-register)
    (logior immediate (aref (cpu-registers cpu) source-register))))
+
+(def-r-type sll #xFF00
+  (setf
+   (aref (cpu-registers cpu) destination-register)
+   (wrap-word (ash (aref (cpu-registers cpu) target-register) shift-amount))))
