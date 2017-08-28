@@ -7,6 +7,10 @@
 (defconstant kseg0-base #x80000000)
 (defconstant kseg1-base #xA0000000)
 (defconstant bios-begin-address-kseg1 #xBFC00000)
+(defconstant memory-control-begin #x1F801000)
+(defconstant memory-control-size 36)
+(defconstant expansion-base-1-address #x1F000000)
+(defconstant expansion-base-2-address #x1F802000)
 
 (declaim (ftype (function ((unsigned-byte 32)
                            (unsigned-byte 32)
@@ -43,6 +47,18 @@
 (defun write-byte* (psx address value)
   (declare (ignore psx))
   (cond
+    ((in-range memory-control-begin memory-control-size address)
+     (cond
+       ; Expansion base 1 register
+       ((= address memory-control-begin)
+        (when (/= value expansion-base-1-address)
+          (format t "Unexpected value for expansion-base-1-address, got 0x~8,'0x, expected 0x~8,'0x!~%" value expansion-base-1-address))
+        value)
+       ((= address (+ memory-control-begin 4))
+        (when (/= value expansion-base-2-address)
+          (format t "Unexpected value for expansion-base-2-address, got 0x~8,'0x, expected 0x~8,'0x!~%" value expansion-base-2-address))
+        value)
+       (t (progn (format t "Unexpected write to Memory Control at 0x~8,'0x!~%" address) value))))
     ; Unimplemented.
     (t (progn (format t "Writes to 0x~8,'0X are unimplemented!~%" address) value))))
 
