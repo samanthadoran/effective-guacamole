@@ -27,6 +27,10 @@
     ((in-range kseg1-base mirror-size address) :kseg1)
     (t :invalid-segment)))
 
+; TODO(Samantha): These cases don't work because the cpu writes words as a
+; series of bytes... Fix this? Means having 3 functions in cpu for memory read
+; and set or something a bit more elegant.
+
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8))
                 load-byte*))
 (defun load-byte* (psx address)
@@ -58,7 +62,10 @@
         (when (/= value expansion-base-2-address)
           (format t "Unexpected value for expansion-base-2-address, got 0x~8,'0x, expected 0x~8,'0x!~%" value expansion-base-2-address))
         value)
-       (t (progn (format t "Unexpected write to Memory Control at 0x~8,'0x!~%" address) value))))
+       ((= address (+ memory-control-begin #x10))
+        (format t "Wrote 0x~8,'0x to bios delay/size!~%" value)
+        value)
+       (t (progn (format t "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address) value))))
     ; Unimplemented.
     (t (progn (format t "Writes to 0x~8,'0X are unimplemented!~%" address) value))))
 
