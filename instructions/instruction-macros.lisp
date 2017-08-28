@@ -3,7 +3,7 @@
 
 ; TODO(Samantha): This insane repetition could probably be made into four
 ; separate macros: `def-instruction` `def-i-type` `def-r-type` `def-j-type`,
-; where the last four would call the first.
+; where the last three would call the first.
 
 (defmacro def-instruction (name opcode &body body)
   `(progn
@@ -23,13 +23,13 @@
        (declare (ignorable source-register target-register immediate))
        ,@body)))
 
-; (defmacro def-j-type (name opcode &body body)
-;  `(def-instruction
-;     ,name
-;     ,opcode
-;     (let ((jump-target (instruction-jump-target instruction)))
-;       ,@body)))
-;
+(defmacro def-j-type (name opcode &body body)
+ `(def-instruction
+    ,name
+    ,opcode
+    (let ((jump-target (instruction-jump-target instruction)))
+      ,@body)))
+
 (defmacro def-r-type (name opcode &body body)
   `(def-instruction
      ,name
