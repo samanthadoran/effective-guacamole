@@ -11,6 +11,6 @@
    cpu
    (wrap-word
     (+
-     (to-signed-byte-32 immediate)
+     (sign-extend immediate)
      (aref (cpu-registers cpu) source-register)))
    (aref (cpu-registers cpu) target-register)))

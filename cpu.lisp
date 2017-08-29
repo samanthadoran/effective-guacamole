@@ -81,6 +81,7 @@
           (instruction-address instruction)
           (instruction-segment instruction)))
 
+; TODO(Samantha): This isn't sign extension...at all.
 (declaim (ftype (function ((unsigned-byte 16)) (signed-byte 32))
                 to-signed-byte-32))
 (defun to-signed-byte-32 (to-be-extended)
@@ -89,6 +90,16 @@
     (* (the (signed-byte 32) -1) (logand #xFFFF (1+ (lognot to-be-extended))))
     to-be-extended))
 
+(declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
+                sign-extend))
+(defun sign-extend (to-be-extended)
+  (logior to-be-extended
+          (if (ldb-test (byte 1 15) to-be-extended)
+            ; Left fill 1s
+            #xFFFF0000
+            ; Left fill 0s
+            #x00000000)))
+
 (declaim (ftype (function ((unsigned-byte 64)) (unsigned-byte 32))
                 wrap-word))
 (defun wrap-word (to-be-wrapped)
@@ -96,6 +107,7 @@
    representation"
   (ldb (byte 32 0) to-be-wrapped))
 
+; TODO(Samantha): These six functions should really be wrapped into the mmu.
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 8))
                 read-cpu))
 (defun read-cpu (cpu address)
