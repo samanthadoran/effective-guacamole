@@ -44,6 +44,8 @@
    :type (function (cpu instruction) (values &optional)))
   (mnemonic "" :type string)
   (operation-code 0 :type (unsigned-byte 6))
+  ; TODO(Samantha): Consider changing the following two values to denote that
+  ; they are indexes
   (source-register 0 :type (unsigned-byte 5))
   (target-register 0 :type (unsigned-byte 5))
   (immediate-value 0 :type (unsigned-byte 16))
@@ -203,4 +205,5 @@
   (let ((instruction (decode cpu (fetch cpu))))
     (setf (cpu-program-counter cpu)
           (wrap-word (+ 4 (cpu-program-counter cpu))))
+    ; TODO(Samantha): Check if the instruction is a branch?
     (execute cpu instruction)))
