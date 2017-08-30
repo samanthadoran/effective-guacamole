@@ -11,6 +11,8 @@
 (defconstant memory-control-size 36)
 (defconstant expansion-base-1-address #x1F000000)
 (defconstant expansion-base-2-address #x1F802000)
+(defconstant ram-size-begin #x1F801060)
+(defconstant ram-size-size 4)
 
 (declaim (ftype (function ((unsigned-byte 32)
                            (unsigned-byte 32)
@@ -66,6 +68,9 @@
         (format t "Wrote 0x~8,'0x to bios delay/size!~%" value)
         value)
        (t (progn (format t "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address) value))))
+    ((in-range ram-size-begin ram-size-size address)
+     (format t "Wrote 0x~8,'0x to ram size!~%" value)
+     value)
     ; Unimplemented.
     (t (progn (format t "Writes to 0x~8,'0X are unimplemented!~%" address) value))))
 
