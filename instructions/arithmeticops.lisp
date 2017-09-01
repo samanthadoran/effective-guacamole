@@ -13,6 +13,14 @@
    (aref (cpu-registers cpu) target-register)
    (logior immediate (aref (cpu-registers cpu) source-register))))
 
+; TODO(Samantha): Fix this shadowing.
+(def-r-type or* #xFF25
+  (setf
+   (aref (cpu-registers cpu) destination-register)
+   (logior
+    (aref (cpu-registers cpu) source-register)
+    (aref (cpu-registers cpu) target-register))))
+
 (def-r-type sll #xFF00
   (setf
    (aref (cpu-registers cpu) destination-register)
