@@ -23,6 +23,6 @@
 (declaim (ftype (function (psx pathname)) console-on))
 (defun console-on (psx bios-rom-path)
   (setf (psx-bios-rom psx) (load-rom-from-file bios-rom-path))
-  (psx-cpu:power-on (psx-cpu psx))
   (map-memory psx)
+  (psx-cpu:power-on (psx-cpu psx))
   (values))

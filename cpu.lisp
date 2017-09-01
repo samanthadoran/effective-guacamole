@@ -11,27 +11,6 @@
 
 (defvar instructions (make-hash-table :test 'equal))
 
-(defstruct cpu
-  "A model PSX cpu"
-  (program-counter 0 :type (unsigned-byte 32))
-  (registers
-   (make-array 32 :element-type '(unsigned-byte 32))
-   :type (simple-array (unsigned-byte 32) (32)))
-  (hi 0 :type (unsigned-byte 32))
-  (lo 0 :type (unsigned-byte 32))
-  (memory-get
-   (lambda (address) (declare (ignore address)) 0)
-   :type (function ((unsigned-byte 32)) (unsigned-byte 8)))
-  (memory-set
-   (lambda (address value) (declare (ignore address value)) 0)
-   :type (function ((unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))))
-
-(declaim (ftype (function (cpu) (unsigned-byte 32)) power-on))
-(defun power-on (cpu)
-  "Sets the cpu to the initial power up state."
-  ; TODO(Samantha): Fully implement.
-  (setf (cpu-program-counter cpu) bios-begin-address-kseg1))
-
 (defstruct instruction
   "PSX instruction"
   (word 0 :type (unsigned-byte 32))
@@ -53,6 +32,32 @@
   (destination-register 0 :type (unsigned-byte 5))
   (shift-amount 0 :type (unsigned-byte 5))
   (secondary-operation-code 0 :type (unsigned-byte 6)))
+
+(defstruct cpu
+  "A model PSX cpu"
+  (program-counter 0 :type (unsigned-byte 32))
+  (registers
+   (make-array 32 :element-type '(unsigned-byte 32))
+   :type (simple-array (unsigned-byte 32) (32)))
+  (hi 0 :type (unsigned-byte 32))
+  (lo 0 :type (unsigned-byte 32))
+  (next-instruction (make-instruction) :type instruction)
+  (memory-get
+   (lambda (address) (declare (ignore address)) 0)
+   :type (function ((unsigned-byte 32)) (unsigned-byte 8)))
+  (memory-set
+   (lambda (address value) (declare (ignore address value)) 0)
+   :type (function ((unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))))
+
+(declaim (ftype (function (cpu) (unsigned-byte 32)) power-on))
+(defun power-on (cpu)
+  "Sets the cpu to the initial power up state."
+  ; TODO(Samantha): Fully implement.
+  (setf (cpu-program-counter cpu) bios-begin-address-kseg1)
+  (setf (cpu-next-instruction cpu) (decode cpu (fetch cpu)))
+  (setf (cpu-program-counter cpu)
+        (wrap-word (+ 4 (cpu-program-counter cpu)))))
+
 
 ; TODO(Samantha): Move the following constants and two functions out to a
 ; separate file so that we don't have multiple copies in the codebase.
@@ -202,8 +207,13 @@
 (defun step-cpu (cpu)
   "Steps the cpu through a single fetch decode execute cycle, returning the
    number of cycles it took."
-  (let ((instruction (decode cpu (fetch cpu))))
+  ; Always execute the next instruction to appease the branch delay slot
+  ; overlords.
+  ; TODO(Samantha): The next instruction after a branch should have the same
+  ; address as the branch instruction itself. Exceptions add another
+  ; complication to this process.
+  (let ((instruction (cpu-next-instruction cpu)))
+    (setf (cpu-next-instruction cpu) (decode cpu (fetch cpu)))
     (setf (cpu-program-counter cpu)
           (wrap-word (+ 4 (cpu-program-counter cpu))))
-    ; TODO(Samantha): Check if the instruction is a branch?
     (execute cpu instruction)))
