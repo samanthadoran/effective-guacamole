@@ -28,6 +28,7 @@
     ,name
     ,opcode
     (let ((jump-target (instruction-jump-target instruction)))
+      (declare (ignorable jump-target))
       ,@body)))
 
 (defmacro def-r-type (name opcode &body body)
