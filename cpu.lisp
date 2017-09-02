@@ -107,7 +107,7 @@
             ; Left fill 0s
             #x00000000)))
 
-(declaim (ftype (function ((unsigned-byte 64)) (unsigned-byte 32))
+(declaim (ftype (function ((signed-byte 64)) (unsigned-byte 32))
                 wrap-word))
 (defun wrap-word (to-be-wrapped)
   "Takes up to a 64 bit unsigned int and returns the truncated 32 bit
