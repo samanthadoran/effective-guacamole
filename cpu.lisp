@@ -88,15 +88,6 @@
           (instruction-address instruction)
           (instruction-segment instruction)))
 
-; TODO(Samantha): This isn't sign extension...at all.
-(declaim (ftype (function ((unsigned-byte 16)) (signed-byte 32))
-                to-signed-byte-32))
-(defun to-signed-byte-32 (to-be-extended)
-  ; If the MSB is set, do the inversions.
-  (if (ldb-test (byte 1 15) to-be-extended)
-    (* (the (signed-byte 32) -1) (logand #xFFFF (1+ (lognot to-be-extended))))
-    to-be-extended))
-
 (declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
                 sign-extend))
 (defun sign-extend (to-be-extended)
@@ -113,6 +104,14 @@
   "Takes up to a 64 bit unsigned int and returns the truncated 32 bit
    representation"
   (ldb (byte 32 0) to-be-wrapped))
+
+(declaim (ftype (function ((unsigned-byte 16)) (signed-byte 32))
+                to-signed-byte-32))
+(defun to-signed-byte-32 (to-be-extended)
+  ; If the MSB is set, do the inversions.
+  (if (ldb-test (byte 1 15) to-be-extended)
+    (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot (sign-extend to-be-extended)))))
+    to-be-extended))
 
 ; TODO(Samantha): These six functions should really be wrapped into the mmu.
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 8))

@@ -25,7 +25,20 @@
     ; account for the already incremented program counter.
     (+ (cpu-program-counter cpu) (ash offset 2) -4))))
 
+(def-i-type beq #x04
+  (when (= (aref (cpu-registers cpu) source-register)
+           (aref (cpu-registers cpu) target-register))
+    (branch cpu (sign-extend immediate))))
+
 (def-i-type bne #x05
   (when (/= (aref (cpu-registers cpu) source-register)
             (aref (cpu-registers cpu) target-register))
+    (branch cpu (sign-extend immediate))))
+
+(def-i-type blez #x06
+  (when (<= (aref (cpu-registers cpu) source-register) 0)
+    (branch cpu (sign-extend immediate))))
+
+(def-i-type bgtz #x07
+  (when (> (aref (cpu-registers cpu) source-register) 0)
     (branch cpu (sign-extend immediate))))
