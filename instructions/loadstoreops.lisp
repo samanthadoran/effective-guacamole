@@ -10,6 +10,7 @@
   (setf
    (aref (cpu-registers cpu) target-register)
    (case destination-register
+     (12 (cpu-status-register cpu))
      (otherwise (progn (format t "Unknown read to cop0$~d~%" destination-register) 0)))))
 
 (def-r-type mtc0 #xC0004
