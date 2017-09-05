@@ -20,6 +20,12 @@
    (cpu-program-counter cpu)
    (aref (cpu-registers cpu) source-register)))
 
+(def-r-type jalr #xFF09
+  (setf
+   (aref (cpu-registers cpu) destination-register)
+   (cpu-program-counter cpu))
+  (jr cpu instruction))
+
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))
                 branch))
 (defun branch (cpu offset)
