@@ -41,6 +41,7 @@
    :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
+  (status-register 0 :type (unsigned-byte 32))
   (next-instruction (make-instruction) :type instruction)
   (memory-get
    (lambda (address) (declare (ignore address)) 0)
@@ -161,25 +162,39 @@
   ; TODO(Samantha): Implement.
   (read-cpu-word cpu (cpu-program-counter cpu)))
 
+(declaim (ftype (function ((unsigned-byte 32)) (unsigned-byte 32)) get-masked-opcode))
+(defun get-masked-opcode (instruction-as-word)
+  (if (= (ldb (byte 2 30) instruction-as-word) 1)
+    ; Coprocessor op. Mnemonic of #xC0NXX, where C0 means coprocessor, n is the
+    ; coprocessor number, and xx is the cop opcode.
+    (logior
+     #x000C0000
+     (ash (ldb (byte 2 26) instruction-as-word) 8)
+     (ldb (byte 5 21) instruction-as-word))
+    ; Everything else.
+    (if (ldb-test (byte 6 26) instruction-as-word)
+      (ldb (byte 6 26) instruction-as-word)
+      (logior #xFF00 (ldb (byte 6 0) instruction-as-word)))))
+
 (declaim (ftype (function (cpu (unsigned-byte 32)) instruction) decode))
 (defun decode (cpu instruction-as-word)
   "Transforms a 32 bit word into an executable instruction."
   ; TODO(Samantha): Implement.
-  (let ((masked-opcode
-         (if (ldb-test (byte 6 26) instruction-as-word)
-           (ldb (byte 6 26) instruction-as-word)
-           (logior #xFF00 (ldb (byte 6 0) instruction-as-word)))))
+  (let ((masked-opcode (get-masked-opcode instruction-as-word)))
     (make-instruction
      :word instruction-as-word
      :segment (determine-segment (cpu-program-counter cpu))
      ; If this instruction isn't in our list, make a dummy.
-     :operation (or (cadr (gethash masked-opcode instructions))
-                    (lambda (cpu instruction)
-                            (declare (ignore cpu instruction))
-                            (values)))
+     :operation (or
+                 (cadr (gethash masked-opcode instructions))
+                 (lambda (cpu instruction)
+                         (declare (ignore cpu instruction))
+                         (values)))
      :address (cpu-program-counter cpu)
      ; If this instruction isn't in our list, it's illegal!
-     :mnemonic (or (car (gethash masked-opcode instructions)) "Illegal Instruction!")
+     :mnemonic (or
+                (car (gethash masked-opcode instructions))
+                "Illegal Instruction!")
      :operation-code (ldb (byte 6 26) instruction-as-word)
      :source-register (ldb (byte 5 21) instruction-as-word)
      :target-register (ldb (byte 5 16) instruction-as-word)
