@@ -41,6 +41,7 @@
    :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
+  ; TODO(Samantha): Move this out to a different struct for clarity.
   (status-register 0 :type (unsigned-byte 32))
   (next-instruction (make-instruction) :type instruction)
   (memory-get
