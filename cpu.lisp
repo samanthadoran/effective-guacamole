@@ -15,6 +15,7 @@
   "PSX instruction"
   (word 0 :type (unsigned-byte 32))
   (address 0 :type (unsigned-byte 32))
+  (masked-opcode 0 :type (unsigned-byte 16))
   (segment :invalid :type keyword)
   (operation
    (lambda (cpu instruction)
@@ -60,7 +61,6 @@
   (setf (cpu-program-counter cpu)
         (wrap-word (+ 4 (cpu-program-counter cpu)))))
 
-
 ; TODO(Samantha): Move the following constants and two functions out to a
 ; separate file so that we don't have multiple copies in the codebase.
 (defconstant mirror-size #x20000000)
@@ -84,11 +84,12 @@
 
 (declaim (ftype (function (instruction) string) instruction-information))
 (defun instruction-information (instruction)
-  (format nil "~A (0x~8,'0X) at 0x~8,'0X (segment: ~A)"
+  (format nil "~A (0x~8,'0X) at 0x~8,'0X (segment: ~A)~%Masked opcode is 0x~4,'0X~%"
           (instruction-mnemonic instruction)
           (instruction-word instruction)
           (instruction-address instruction)
-          (instruction-segment instruction)))
+          (instruction-segment instruction)
+          (instruction-masked-opcode instruction)))
 
 (declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
                 sign-extend))
@@ -192,6 +193,7 @@
                          (declare (ignore cpu instruction))
                          (values)))
      :address (cpu-program-counter cpu)
+     :masked-opcode masked-opcode
      ; If this instruction isn't in our list, it's illegal!
      :mnemonic (or
                 (car (gethash masked-opcode instructions))
@@ -212,10 +214,6 @@
   ; TODO(Samantha): Implement.
   (funcall (instruction-operation instruction) cpu instruction)
   (format t "~A~%" (instruction-information instruction))
-  (format t "Masked opcode is 0x~8,'0X~%"
-          (if (ldb-test (byte 6 26) (instruction-word instruction))
-            (ldb (byte 6 26) (instruction-word instruction))
-            (logior #xFF00 (ldb (byte 6 0) (instruction-word instruction)))))
   0)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
