@@ -6,6 +6,8 @@
    (aref (cpu-registers cpu) target-register)
    (ash immediate 16)))
 
+; TODO(Samantha): Consider making this io a bit more generic, it's
+; frustrating to repeat myself.
 (def-r-type mfc0 #xC0000
   (setf
    (aref (cpu-registers cpu) target-register)

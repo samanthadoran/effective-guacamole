@@ -45,6 +45,16 @@
     (aref (cpu-registers cpu) source-register)
     (aref (cpu-registers cpu) target-register))))
 
+(def-r-type nor* #xFF27
+  (setf
+   (aref (cpu-registers cpu) destination-register)
+   ; Make sure to wrap the word because the result will be negative.
+   (wrap-word
+    (lognot
+     (logior
+      (aref (cpu-registers cpu) source-register)
+      (aref (cpu-registers cpu) target-register))))))
+
 (def-r-type sll #xFF00
   (setf
    (aref (cpu-registers cpu) destination-register)
