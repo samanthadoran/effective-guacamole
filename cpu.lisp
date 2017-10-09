@@ -15,7 +15,7 @@
   "PSX instruction"
   (word 0 :type (unsigned-byte 32))
   (address 0 :type (unsigned-byte 32))
-  (masked-opcode 0 :type (unsigned-byte 16))
+  (masked-opcode 0 :type (unsigned-byte 20))
   (segment :invalid :type keyword)
   (operation
    (lambda (cpu instruction)
@@ -90,6 +90,14 @@
           (instruction-address instruction)
           (instruction-segment instruction)
           (instruction-masked-opcode instruction)))
+
+(declaim
+ (ftype (function
+         (cpu (unsigned-byte 5) (unsigned-byte 32)) (unsigned-byte 32))
+        set-register))
+(defun set-register (cpu index value)
+  (setf (aref (cpu-registers cpu) index) value)
+  (setf (aref (cpu-registers cpu) 0) 0))
 
 (declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
                 sign-extend))
