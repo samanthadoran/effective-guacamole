@@ -6,6 +6,8 @@
 (defconstant kuseg-base #x00000000)
 (defconstant kseg0-base #x80000000)
 (defconstant kseg1-base #xA0000000)
+(defconstant ram-begin-kseg1 #xA0000000)
+(defconstant ram-size #x200000)
 (defconstant bios-begin-address-kseg1 #xBFC00000)
 (defconstant memory-control-begin #x1F801000)
 (defconstant memory-control-size 36)
@@ -43,6 +45,9 @@
                (array-dimension (psx-bios-rom psx) 0)
                address)
      (aref (psx-bios-rom psx) (- address bios-begin-address-kseg1)))
+    ; RAM
+    ((in-range ram-begin-kseg1 ram-size address)
+     (aref (psx-ram psx) (- address ram-begin-kseg1)))
     ; Unimplemented.
     (t (progn (format t "Reads to 0x~8,'0X are unimplemented~%" address) 0))))
 
@@ -51,7 +56,6 @@
  (ftype (function (psx (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
         write-byte*))
 (defun write-byte* (psx address value)
-  (declare (ignore psx))
   (cond
     ((in-range memory-control-begin memory-control-size address)
      (cond
@@ -71,6 +75,12 @@
     ((in-range ram-size-begin ram-size-size address)
      (format t "Wrote 0x~8,'0x to ram size!~%" value)
      value)
+    ; RAM
+    ((in-range ram-begin-kseg1 ram-size address)
+     (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
+     (setf
+      (aref (psx-ram psx) (- address ram-begin-kseg1))
+      value))
     ; Unimplemented.
     (t (progn (format t "Writes to 0x~8,'0X are unimplemented!~%" address) value))))
 
