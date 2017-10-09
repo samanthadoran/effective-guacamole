@@ -10,9 +10,7 @@
 ; TODO(Samantha): This doesn't use jump-target, should it just be
 ; def-instruction?
 (def-j-type jal #x03
-  (setf
-   (aref (cpu-registers cpu) 31)
-   (cpu-program-counter cpu))
+  (set-register cpu 31 (cpu-program-counter cpu))
   (jmp cpu instruction))
 
 (def-i-type jr #xFF08
@@ -21,9 +19,7 @@
    (aref (cpu-registers cpu) source-register)))
 
 (def-r-type jalr #xFF09
-  (setf
-   (aref (cpu-registers cpu) destination-register)
-   (cpu-program-counter cpu))
+  (set-register cpu destination-register (cpu-program-counter cpu))
   (jr cpu instruction))
 
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))

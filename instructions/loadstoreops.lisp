@@ -9,11 +9,10 @@
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.
 (def-r-type mfc0 #xC0000
-  (setf
-   (aref (cpu-registers cpu) target-register)
-   (case destination-register
-     (12 (cpu-status-register cpu))
-     (otherwise (progn (format t "Unknown read to cop0$~d~%" destination-register) 0)))))
+  (set-register cpu target-register
+    (case destination-register
+      (12 (cpu-status-register cpu))
+      (otherwise (progn (format t "Unknown read to cop0$~d~%" destination-register) 0)))))
 
 (def-r-type mtc0 #xC0004
   (case destination-register
