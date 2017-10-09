@@ -13,14 +13,22 @@
       (format t "Overflow behavior unimplemented. =(~%"))
     (set-register
      cpu target-register
-     (ldb (byte 0 32) value))))
+     (wrap-word value))))
 
 (def-i-type addiu #x09
   (set-register
    cpu target-register
-   (ldb (byte 0 32)
+   (wrap-word
         (+ (sign-extend immediate)
            (aref (cpu-registers cpu) source-register)))))
+
+(def-r-type addu #xFF21
+  (set-register
+   cpu destination-register
+   (wrap-word
+    (+
+     (aref (cpu-registers cpu) source-register)
+     (aref (cpu-registers cpu) target-register)))))
 
 (def-i-type andi #x0C
   (set-register
@@ -67,6 +75,14 @@
      (logior
       (aref (cpu-registers cpu) source-register)
       (aref (cpu-registers cpu) target-register))))))
+
+(def-r-type sltu #xFF2B
+  (set-register
+   cpu destination-register
+   (if (< (aref (cpu-registers cpu) source-register)
+          (aref (cpu-registers cpu) target-register))
+     1
+     0)))
 
 (def-r-type sll #xFF00
   (set-register
