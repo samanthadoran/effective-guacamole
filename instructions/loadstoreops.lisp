@@ -27,6 +27,16 @@
               destination-register)
       0))))
 
+(def-i-type lw #x23
+  (set-register
+   cpu target-register
+   (read-cpu-word
+    cpu
+    (wrap-word
+     (+
+      (sign-extend immediate)
+      (aref (cpu-registers cpu) source-register))))))
+
 (def-i-type sw #x2B
   (write-cpu-word
    cpu
