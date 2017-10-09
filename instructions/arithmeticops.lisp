@@ -1,11 +1,26 @@
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
 
+(def-i-type addi #x08
+  (format t "Adding 0x~8,'0X to 0x~8,'0X Result is 0x~8,'0X~%"
+          (sign-extend immediate)
+          (aref (cpu-registers cpu) source-register)
+          (+ (sign-extend immediate)
+                          (aref (cpu-registers cpu) source-register)))
+  (let ((value (+ (sign-extend immediate)
+                  (aref (cpu-registers cpu) source-register))))
+    (when (> value #XFFFFFFFF)
+      (format t "Overflow behavior unimplemented. =(~%"))
+    (set-register
+     cpu target-register
+     (ldb (byte 0 32) value))))
+
 (def-i-type addiu #x09
   (set-register
    cpu target-register
-   (ldb (byte 32 0) (+ (sign-extend immediate)
-                       (aref (cpu-registers cpu) source-register)))))
+   (ldb (byte 0 32)
+        (+ (sign-extend immediate)
+           (aref (cpu-registers cpu) source-register)))))
 
 (def-i-type andi #x0C
   (set-register
