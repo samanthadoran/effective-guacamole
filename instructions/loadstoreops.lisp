@@ -1,6 +1,9 @@
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
 
+(defun is-cache-isolated (cpu)
+  (ldb-test (byte 1 16) (cpu-status-register cpu)))
+
 (def-i-type lui #x0F
   (setf
    (aref (cpu-registers cpu) target-register)
@@ -28,20 +31,42 @@
       0))))
 
 (def-i-type lw #x23
-  (set-register
-   cpu target-register
-   (read-cpu-word
-    cpu
-    (wrap-word
-     (+
-      (sign-extend immediate)
-      (aref (cpu-registers cpu) source-register))))))
+  (when (not (is-cache-isolated cpu))
+    (set-register
+     cpu target-register
+     (read-cpu-word
+      cpu
+      (wrap-word
+       (+
+        (sign-extend immediate)
+        (aref (cpu-registers cpu) source-register)))))))
 
 (def-i-type sw #x2B
-  (write-cpu-word
-   cpu
-   (wrap-word
-    (+
-     (sign-extend immediate)
-     (aref (cpu-registers cpu) source-register)))
-   (aref (cpu-registers cpu) target-register)))
+  (when (not (is-cache-isolated cpu))
+    (write-cpu-word
+     cpu
+     (wrap-word
+      (+
+       (sign-extend immediate)
+       (aref (cpu-registers cpu) source-register)))
+     (aref (cpu-registers cpu) target-register))))
+
+(def-i-type sb #x28
+  (when (not (is-cache-isolated cpu))
+    (write-cpu
+     cpu
+     (wrap-word
+      (+
+       (sign-extend immediate)
+       (aref (cpu-registers cpu) source-register)))
+     (ldb (byte 8 0) (aref (cpu-registers cpu) target-register)))))
+
+(def-i-type sh #x29
+  (when (not (is-cache-isolated cpu))
+    (write-cpu-half-word
+     cpu
+     (wrap-word
+      (+
+       (sign-extend immediate)
+       (aref (cpu-registers cpu) source-register)))
+     (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))
