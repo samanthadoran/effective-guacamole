@@ -132,7 +132,7 @@
        ((= address (+ memory-control-begin #x10))
         (format t "Wrote 0x~8,'0x to bios delay/size!~%" value)
         value)
-       (t (progn (format t "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address) value))))
+       (t (format t "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address) value)))
     ((= address ram-size-begin)
      (format t "Wrote 0x~8,'0x to ram size!~%" value)
      value)

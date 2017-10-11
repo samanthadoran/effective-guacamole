@@ -15,7 +15,9 @@
   (set-register cpu target-register
     (case destination-register
       (12 (cpu-status-register cpu))
-      (otherwise (progn (format t "Unknown read to cop0$~d~%" destination-register) 0)))))
+      (otherwise
+       (format t "Unknown read to cop0$~d~%" destination-register)
+       0))))
 
 (def-r-type mtc0 #xC0004
   (case destination-register
@@ -24,11 +26,10 @@
       (cpu-status-register cpu)
       (aref (cpu-registers cpu) target-register)))
     (otherwise
-     (progn
-      (format t "Unknown write of 0x~8,'0X to cop0$~d~%"
-              (aref (cpu-registers cpu) target-register)
-              destination-register)
-      0))))
+     (format t "Unknown write of 0x~8,'0X to cop0$~d~%"
+             (aref (cpu-registers cpu) target-register)
+             destination-register)
+     0)))
 
 (def-i-type lw #x23
   (when (not (is-cache-isolated cpu))
