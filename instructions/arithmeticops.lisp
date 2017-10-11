@@ -9,7 +9,9 @@
                           (aref (cpu-registers cpu) source-register)))
   (let ((value (+ (sign-extend immediate)
                   (aref (cpu-registers cpu) source-register))))
-    (when (> value #XFFFFFFFF)
+    ; TODO(Samantha): Consider declaring the type of value so this is
+    ; guaranteed to work.
+    (when (> value #xFFFFFFFF)
       (format t "Overflow behavior unimplemented. =(~%"))
     (set-register
      cpu target-register
@@ -75,6 +77,14 @@
      (logior
       (aref (cpu-registers cpu) source-register)
       (aref (cpu-registers cpu) target-register))))))
+
+(def-r-type slt #xFF2A
+  (set-register
+   cpu destination-register
+   (if (< (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
+          (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))
+     1
+     0)))
 
 (def-r-type sltu #xFF2B
   (set-register

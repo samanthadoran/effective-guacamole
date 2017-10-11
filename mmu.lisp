@@ -14,7 +14,7 @@
 (defconstant expansion-base-1-address #x1F000000)
 (defconstant expansion-base-2-address #x1F802000)
 (defconstant ram-size-begin #x1F801060)
-(defconstant ram-size-size 4)
+(defconstant cache-control #xFFFE0130)
 
 (declaim (ftype (function ((unsigned-byte 32)
                            (unsigned-byte 32)
@@ -31,31 +31,90 @@
     ((in-range kseg1-base mirror-size address) :kseg1)
     (t :invalid-segment)))
 
-; TODO(Samantha): These cases don't work because the cpu writes words as a
-; series of bytes... Fix this? Means having 3 functions in cpu for memory read
-; and set or something a bit more elegant.
+(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))
+                write-word-to-byte-array))
+(defun write-word-to-byte-array (array offset word)
+  (setf
+   (aref array offset)
+   (ldb (byte 8 0) word))
+  (setf
+   (aref array (+ 1 offset))
+   (ldb (byte 8 8) word))
+  (setf
+   (aref array (+ 2 offset))
+   (ldb (byte 8 16) word))
+  (setf
+   (aref array (+ 3 offset))
+   (ldb (byte 8 24) word))
+  word)
+
+(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32)) (unsigned-byte 32))
+                read-word-from-byte-array))
+(defun read-word-from-byte-array (array offset)
+  (logior
+   (aref array offset)
+   (ash (aref array (+ 1 offset)) 8)
+   (ash (aref array (+ 2 offset)) 16)
+   (ash (aref array (+ 3 offset)) 24)))
 
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8))
                 load-byte*))
 (defun load-byte* (psx address)
+  (declare (ignore psx))
+  ; TODO(Samantha): Implement more places, simplify the cond.
+  (cond
+    ; Unimplemented.
+    (t (progn (format t "Byte reads to 0x~8,'0X are unimplemented~%" address) (loop) 0))))
+
+(declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 16))
+                load-half-word*))
+(defun load-half-word* (psx address)
+  (declare (ignore psx))
+  ; TODO(Samantha): Implement more places, simplify the cond.
+  (cond
+    ; Unimplemented.
+    (t (progn (format t "Half-word reads to 0x~8,'0X are unimplemented~%" address) (loop) 0))))
+
+(declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 32))
+                load-word*))
+(defun load-word* (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
   (cond
     ; BIOS
     ((in-range bios-begin-address-kseg1
                (array-dimension (psx-bios-rom psx) 0)
                address)
-     (aref (psx-bios-rom psx) (- address bios-begin-address-kseg1)))
+     (read-word-from-byte-array
+      (psx-bios-rom psx) (- address bios-begin-address-kseg1)))
     ; RAM
     ((in-range ram-begin-kseg1 ram-size address)
-     (aref (psx-ram psx) (- address ram-begin-kseg1)))
+     (read-word-from-byte-array (psx-ram psx) (- address ram-begin-kseg1)))
     ; Unimplemented.
-    (t (progn (format t "Reads to 0x~8,'0X are unimplemented~%" address) 0))))
+    (t (progn (format t "Word reads to 0x~8,'0X are unimplemented~%" address) (loop) 0))))
 
 ; TODO(Samantha): Figure out a way to fix this shadowing.
 (declaim
  (ftype (function (psx (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
         write-byte*))
 (defun write-byte* (psx address value)
+  (declare (ignore psx))
+  (cond
+    ; Unimplemented.
+    (t (progn (format t "Byte writes to 0x~8,'0X are unimplemented!~%" address) (loop) value))))
+
+(declaim
+ (ftype (function (psx (unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16))
+        write-half-word*))
+(defun write-half-word* (psx address value)
+  (declare (ignore psx))
+  (cond
+    ; Unimplemented.
+    (t (progn (format t "Half-word writes to 0x~8,'0X are unimplemented!~%" address) (loop) value))))
+
+(declaim
+ (ftype (function (psx (unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))
+        write-word*))
+(defun write-word* (psx address value)
   (cond
     ((in-range memory-control-begin memory-control-size address)
      (cond
@@ -72,23 +131,36 @@
         (format t "Wrote 0x~8,'0x to bios delay/size!~%" value)
         value)
        (t (progn (format t "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address) value))))
-    ((in-range ram-size-begin ram-size-size address)
+    ((= address ram-size-begin)
      (format t "Wrote 0x~8,'0x to ram size!~%" value)
+     value)
+    ((= address cache-control)
+     (format t "Wrote 0x~8,'0x to cache control!~%" value)
      value)
     ; RAM
     ((in-range ram-begin-kseg1 ram-size address)
      (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
-     (setf
-      (aref (psx-ram psx) (- address ram-begin-kseg1))
-      value))
+     (write-word-to-byte-array (psx-ram psx) (- address ram-begin-kseg1) value))
     ; Unimplemented.
-    (t (progn (format t "Writes to 0x~8,'0X are unimplemented!~%" address) value))))
+    (t (progn (format t "Word writes to 0x~8,'0X are unimplemented!~%" address) (loop) value))))
 
 (declaim (ftype (function (psx) function) map-memory))
 (defun map-memory (psx)
   (setf
-   (psx-cpu:cpu-memory-get (psx-cpu psx))
+   (psx-cpu:cpu-memory-get-byte (psx-cpu psx))
    (lambda (address) (load-byte* psx address)))
   (setf
-   (psx-cpu:cpu-memory-set (psx-cpu psx))
-   (lambda (address value) (write-byte* psx address value))))
+   (psx-cpu:cpu-memory-get-half-word (psx-cpu psx))
+   (lambda (address) (load-half-word* psx address)))
+  (setf
+   (psx-cpu:cpu-memory-get-word (psx-cpu psx))
+   (lambda (address) (load-word* psx address)))
+  (setf
+   (psx-cpu:cpu-memory-set-byte (psx-cpu psx))
+   (lambda (address value) (write-byte* psx address value)))
+  (setf
+   (psx-cpu:cpu-memory-set-half-word (psx-cpu psx))
+   (lambda (address value) (write-half-word* psx address value)))
+  (setf
+   (psx-cpu:cpu-memory-set-word (psx-cpu psx))
+   (lambda (address value) (write-word* psx address value))))

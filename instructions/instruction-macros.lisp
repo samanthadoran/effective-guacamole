@@ -10,6 +10,9 @@
       (values))
     (setf (gethash ,opcode instructions) (list (string ',name) (function ,name)))))
 
+; TODO(Samantha): Almost all of these instructions predictably set a register.
+; Consider making it part of the macro and then special casing the outliers.
+
 (defmacro def-i-type (name opcode &body body)
   `(def-instruction
      ,name

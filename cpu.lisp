@@ -2,7 +2,9 @@
   (:nicknames #:cpu)
   (:use :cl)
   (:export #:cpu #:make-cpu
-           #:cpu-memory-get #:cpu-memory-set
+           #:cpu-memory-get-byte #:cpu-memory-set-byte
+           #:cpu-memory-get-half-word #:cpu-memory-set-half-word
+           #:cpu-memory-get-word #:cpu-memory-set-word
            #:power-on #:step-cpu))
 
 (in-package :psx-cpu)
@@ -45,12 +47,24 @@
   ; TODO(Samantha): Move this out to a different struct for clarity.
   (status-register 0 :type (unsigned-byte 32))
   (next-instruction (make-instruction) :type instruction)
-  (memory-get
+  (memory-get-byte
    (lambda (address) (declare (ignore address)) 0)
    :type (function ((unsigned-byte 32)) (unsigned-byte 8)))
-  (memory-set
+  (memory-get-half-word
+   (lambda (address) (declare (ignore address)) 0)
+   :type (function ((unsigned-byte 32)) (unsigned-byte 16)))
+  (memory-get-word
+   (lambda (address) (declare (ignore address)) 0)
+   :type (function ((unsigned-byte 32)) (unsigned-byte 32)))
+  (memory-set-byte
    (lambda (address value) (declare (ignore address value)) 0)
-   :type (function ((unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))))
+   :type (function ((unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8)))
+  (memory-set-half-word
+   (lambda (address value) (declare (ignore address value)) 0)
+   :type (function ((unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16)))
+  (memory-set-word
+   (lambda (address value) (declare (ignore address value)) 0)
+   :type (function ((unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))))
 
 (declaim (ftype (function (cpu) (unsigned-byte 32)) power-on))
 (defun power-on (cpu)
@@ -84,7 +98,7 @@
 
 (declaim (ftype (function (instruction) string) instruction-information))
 (defun instruction-information (instruction)
-  (format nil "~A (0x~8,'0X) at 0x~8,'0X (segment: ~A)~%Masked opcode is 0x~4,'0X~%"
+  (format nil "~A (0x~8,'0X) at 0x~8,'0X (segment: ~A)~%Masked opcode is 0x~5,'0X~%"
           (instruction-mnemonic instruction)
           (instruction-word instruction)
           (instruction-address instruction)
@@ -116,55 +130,44 @@
    representation"
   (ldb (byte 32 0) to-be-wrapped))
 
-(declaim (ftype (function ((unsigned-byte 16)) (signed-byte 32))
+(declaim (ftype (function ((unsigned-byte 32)) (signed-byte 32))
                 to-signed-byte-32))
-(defun to-signed-byte-32 (to-be-extended)
+(defun to-signed-byte-32 (to-be-converted)
   ; If the MSB is set, do the inversions.
-  (if (ldb-test (byte 1 15) to-be-extended)
-    (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot (sign-extend to-be-extended)))))
-    to-be-extended))
+  (if (ldb-test (byte 1 31) to-be-converted)
+    (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot to-be-converted))))
+    to-be-converted))
 
 ; TODO(Samantha): These six functions should really be wrapped into the mmu.
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 8))
                 read-cpu))
-(defun read-cpu (cpu address)
-  (funcall (cpu-memory-get cpu) address))
+(defun read-cpu-byte (cpu address)
+  (funcall (cpu-memory-get-byte cpu) address))
 
 (declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
                 write-cpu))
-(defun write-cpu (cpu address value)
-  (funcall (cpu-memory-set cpu) address value))
+(defun write-cpu-byte (cpu address value)
+  (funcall (cpu-memory-set-byte cpu) address value))
 
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 16))
                 read-cpu-half-word))
 (defun read-cpu-half-word (cpu address)
-  (let ((lo (read-cpu cpu address))
-        (hi (read-cpu cpu (wrap-word (1+ address)))))
-    (logior (ash hi 8) lo)))
+  (funcall (cpu-memory-get-half-word cpu) address))
 
 (declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16))
                 write-cpu-half-word))
 (defun write-cpu-half-word (cpu address value)
-  (let ((lo (ldb (byte 8 0) value))
-        (hi (ldb (byte 8 8) value)))
-    (write-cpu cpu address lo)
-    (write-cpu cpu (wrap-word (1+ address)) hi)
-    value))
+  (funcall (cpu-memory-set-half-word cpu) address value))
 
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))
                 read-cpu-word))
 (defun read-cpu-word (cpu address)
-  (let ((lo (read-cpu-half-word cpu address))
-        (hi (read-cpu-half-word cpu (wrap-word (+ 2 address)))))
-    (logior (ash hi 16) lo)))
+  (funcall (cpu-memory-get-word cpu) address))
 
 (declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))
                 write-cpu-word))
 (defun write-cpu-word (cpu address value)
-  (let ((lo (ldb (byte 16 0) value))
-        (hi (ldb (byte 16 16) value)))
-    (write-cpu-half-word cpu address lo)
-    (write-cpu-half-word cpu (wrap-word (+ 2 address)) hi)))
+  (funcall (cpu-memory-set-word cpu) address value))
 
 (declaim (ftype (function (cpu) (unsigned-byte 32)) fetch))
 (defun fetch (cpu)
@@ -220,8 +223,10 @@
   "Executes a single instruction and returns the number of cycles that this
    took."
   ; TODO(Samantha): Implement.
-  (funcall (instruction-operation instruction) cpu instruction)
   (format t "~A~%" (instruction-information instruction))
+  (when (string= (instruction-mnemonic instruction) "Illegal Instruction!")
+    (loop))
+  (funcall (instruction-operation instruction) cpu instruction)
   0)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
