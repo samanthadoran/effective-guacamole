@@ -17,6 +17,9 @@
   "PSX instruction"
   (word 0 :type (unsigned-byte 32))
   (address 0 :type (unsigned-byte 32))
+  ; A short representation of an instruction without any specific information.
+  ; Used for indexing into the hashtable instead of having a giant case
+  ; statement.
   (masked-opcode 0 :type (unsigned-byte 20))
   (segment :invalid :type keyword)
   (operation
@@ -44,9 +47,10 @@
    :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
-  ; TODO(Samantha): Move this out to a different struct for clarity.
+  ; TODO(Samantha): Move this out to a coprocessor0 struct for clarity.
   (status-register 0 :type (unsigned-byte 32))
   (next-instruction (make-instruction) :type instruction)
+  ; TODO(Samantha): These are awful and shouldn't really be necessary.
   (memory-get-byte
    (lambda (address) (declare (ignore address)) 0)
    :type (function ((unsigned-byte 32)) (unsigned-byte 8)))
@@ -98,6 +102,8 @@
 
 (declaim (ftype (function (instruction) string) instruction-information))
 (defun instruction-information (instruction)
+  "Returns a pretty formatted representation of any given instruction."
+  ; TODO(Samantha): Add a line with disassembly.
   (format nil "~A (0x~8,'0X) at 0x~8,'0X (segment: ~A)~%Masked opcode is 0x~5,'0X~%"
           (instruction-mnemonic instruction)
           (instruction-word instruction)
@@ -127,12 +133,13 @@
                 wrap-word))
 (defun wrap-word (to-be-wrapped)
   "Takes up to a 64 bit unsigned int and returns the truncated 32 bit
-   representation"
+   representation."
   (ldb (byte 32 0) to-be-wrapped))
 
 (declaim (ftype (function ((unsigned-byte 32)) (signed-byte 32))
                 to-signed-byte-32))
 (defun to-signed-byte-32 (to-be-converted)
+  "Translates a psx unsigned word into a lisp signed int for easier arithmetic."
   ; If the MSB is set, do the inversions.
   (if (ldb-test (byte 1 31) to-be-converted)
     (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot to-be-converted))))
@@ -172,11 +179,12 @@
 (declaim (ftype (function (cpu) (unsigned-byte 32)) fetch))
 (defun fetch (cpu)
   "Retrieves an instruction for execution as a 32 bit word."
-  ; TODO(Samantha): Implement.
   (read-cpu-word cpu (cpu-program-counter cpu)))
 
 (declaim (ftype (function ((unsigned-byte 32)) (unsigned-byte 32)) get-masked-opcode))
 (defun get-masked-opcode (instruction-as-word)
+  "Creates a shorter mnemonic for opcodes that's stripped of non-general
+   information."
   (if (= (ldb (byte 2 30) instruction-as-word) 1)
     ; Coprocessor op. Mnemonic of #xC0NXX, where C0 means coprocessor, n is the
     ; coprocessor number, and xx is the cop opcode.
@@ -184,15 +192,16 @@
      #x000C0000
      (ash (ldb (byte 2 26) instruction-as-word) 8)
      (ldb (byte 5 21) instruction-as-word))
-    ; Everything else.
     (if (ldb-test (byte 6 26) instruction-as-word)
+      ; If any bits in [26, 31] of instruction-as-word are set, we can just use
+      ; those as our masked opcode, otherwise we have a special opcode and mark
+      ; it using a leading #xFF and then use bits [0, 6] of instruction-as-word.
       (ldb (byte 6 26) instruction-as-word)
       (logior #xFF00 (ldb (byte 6 0) instruction-as-word)))))
 
 (declaim (ftype (function (cpu (unsigned-byte 32)) instruction) decode))
 (defun decode (cpu instruction-as-word)
   "Transforms a 32 bit word into an executable instruction."
-  ; TODO(Samantha): Implement.
   (let ((masked-opcode (get-masked-opcode instruction-as-word)))
     (make-instruction
      :word instruction-as-word
@@ -225,7 +234,7 @@
   ; TODO(Samantha): Implement.
   (format t "~A~%" (instruction-information instruction))
   (when (string= (instruction-mnemonic instruction) "Illegal Instruction!")
-    (loop))
+    (error "Illegal instruction!~%~A~%" instruction))
   (funcall (instruction-operation instruction) cpu instruction)
   0)
 
