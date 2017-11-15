@@ -94,6 +94,21 @@
      1
      0)))
 
+(def-i-type slti #x0A
+  (set-register
+   cpu target-register
+   (if (< (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
+          (to-signed-byte-32 (sign-extend immediate)))
+     1
+     0)))
+
+(def-i-type sltiu #x0B
+  (set-register
+   cpu target-register
+   (if (< (aref (cpu-registers cpu) source-register) immediate)
+     1
+     0)))
+
 (def-r-type sll #xFF00
   (set-register
    cpu destination-register
