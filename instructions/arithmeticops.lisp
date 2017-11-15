@@ -12,10 +12,8 @@
     ; TODO(Samantha): Consider declaring the type of value so this is
     ; guaranteed to work.
     (when (> value #xFFFFFFFF)
-      (format t "Overflow behavior unimplemented. =(~%"))
-    (set-register
-     cpu target-register
-     (wrap-word value))))
+      (error "Overflow behavior unimplemented. =(~%"))
+    (set-register cpu target-register (wrap-word value))))
 
 (def-i-type addiu #x09
   (set-register
@@ -23,6 +21,14 @@
    (wrap-word
         (+ (sign-extend immediate)
            (aref (cpu-registers cpu) source-register)))))
+
+(def-r-type add #xFF20
+  (let ((value (+
+                (aref (cpu-registers cpu) source-register)
+                (aref (cpu-registers cpu) target-register))))
+    (when (> value #xFFFFFFFF)
+      (error "Overflow behavior unimplemented. =(~%"))
+    (set-register cpu destination-register value)))
 
 (def-r-type addu #xFF21
   (set-register
@@ -113,3 +119,18 @@
   (set-register
    cpu destination-register
    (wrap-word (ash (aref (cpu-registers cpu) target-register) shift-amount))))
+
+; TODO(Samantha): Are those `to-signed-byte-32`s going to work?
+(def-r-type mult #xFF18
+  (let ((result
+         (* (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
+            (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
+    (setf (cpu-lo cpu) (ldb (byte 32 0) result))
+    (setf (cpu-hi cpu) (ldb (byte 32 32) result))))
+
+(def-r-type multu #xFF19
+  (let ((result
+         (* (aref (cpu-registers cpu) source-register)
+            (aref (cpu-registers cpu) target-register))))
+    (setf (cpu-lo cpu) (ldb (byte 32 0) result))
+    (setf (cpu-hi cpu) (ldb (byte 32 32) result))))
