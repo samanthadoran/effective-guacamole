@@ -8,4 +8,5 @@
                (:file "instructions/arithmeticops")
                (:file "instructions/branchops")
                (:file "instructions/loadstoreops")
-               (:file "instructions/instructions")))
+               (:file "instructions/instructions")
+               (:file "util/missing_ops" :depends-on ("cpu"))))
