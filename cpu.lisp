@@ -129,6 +129,16 @@
             ; Left fill 0s
             #x00000000)))
 
+(declaim (ftype (function ((unsigned-byte 8)) (unsigned-byte 32))
+                sign-extend-byte))
+(defun sign-extend-byte (to-be-extended)
+  (logior to-be-extended
+          (if (ldb-test (byte 1 7) to-be-extended)
+            ; Left fill 1s
+            #xFFFFFF00
+            ; Left fill 0s
+            #x00000000)))
+
 (declaim (ftype (function ((signed-byte 64)) (unsigned-byte 32))
                 wrap-word))
 (defun wrap-word (to-be-wrapped)

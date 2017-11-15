@@ -31,11 +31,35 @@
              destination-register)
      0)))
 
+; TODO(Samantha): Consider making a macro for cache sensitivity.
+(def-i-type lb #x20
+  (when (not (is-cache-isolated cpu))
+    (set-register
+     cpu target-register
+     (sign-extend-byte
+      (read-cpu-byte
+       cpu
+       (wrap-word
+        (+
+         (sign-extend immediate)
+         (aref (cpu-registers cpu) source-register))))))))
+
 (def-i-type lw #x23
   (when (not (is-cache-isolated cpu))
     (set-register
      cpu target-register
      (read-cpu-word
+      cpu
+      (wrap-word
+       (+
+        (sign-extend immediate)
+        (aref (cpu-registers cpu) source-register)))))))
+
+(def-i-type lbu #x24
+  (when (not (is-cache-isolated cpu))
+    (set-register
+     cpu target-register
+     (read-cpu-byte
       cpu
       (wrap-word
        (+
