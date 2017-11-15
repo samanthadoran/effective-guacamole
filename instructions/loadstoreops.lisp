@@ -44,6 +44,18 @@
          (sign-extend immediate)
          (aref (cpu-registers cpu) source-register))))))))
 
+(def-i-type lh #x21
+  (when (not (is-cache-isolated cpu))
+    (set-register
+     cpu target-register
+     (sign-extend
+      (read-cpu-half-word
+       cpu
+       (wrap-word
+        (+
+         (sign-extend immediate)
+         (aref (cpu-registers cpu) source-register))))))))
+
 (def-i-type lw #x23
   (when (not (is-cache-isolated cpu))
     (set-register
@@ -60,6 +72,17 @@
     (set-register
      cpu target-register
      (read-cpu-byte
+      cpu
+      (wrap-word
+       (+
+        (sign-extend immediate)
+        (aref (cpu-registers cpu) source-register)))))))
+
+(def-i-type lhu #x25
+  (when (not (is-cache-isolated cpu))
+    (set-register
+     cpu target-register
+     (read-cpu-half-word
       cpu
       (wrap-word
        (+
@@ -95,3 +118,19 @@
        (sign-extend immediate)
        (aref (cpu-registers cpu) source-register)))
      (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))
+
+(def-r-type mfhi #xFF10
+  (set-register
+   cpu destination-register
+   (cpu-hi cpu)))
+
+(def-r-type mthi #xFF11
+  (setf (cpu-hi cpu) (aref (cpu-registers cpu) source-register)))
+
+(def-r-type mflo #xFF12
+  (set-register
+   cpu destination-register
+   (cpu-lo cpu)))
+
+(def-r-type mtlo #xFF13
+  (setf (cpu-lo cpu) (aref (cpu-registers cpu) source-register)))
