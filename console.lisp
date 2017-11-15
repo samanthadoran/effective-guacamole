@@ -1,7 +1,7 @@
 (defpackage #:psx-console
   (:nicknames #:psx)
   (:use :cl :psx-cpu)
-  (:export #:make-psx #:load-rom-from-file #:console-on))
+  (:export #:make-psx #:load-rom-from-file #:console-on #:make-console))
 
 (in-package :psx-console)
 (declaim (optimize (speed 3) (safety 1)))
@@ -29,3 +29,10 @@
   (map-memory psx)
   (psx-cpu:power-on (psx-cpu psx))
   (values))
+
+; TODO(Samantha): Rename this to something more descriptive
+(declaim (ftype (function (pathname) psx) make-console))
+(defun make-console (bios-rom-path)
+  (let ((my-psx (make-psx)))
+    (console-on my-psx bios-rom-path)
+    my-psx))
