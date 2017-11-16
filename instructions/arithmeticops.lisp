@@ -11,6 +11,8 @@
                   (aref (cpu-registers cpu) source-register))))
     ; TODO(Samantha): Consider declaring the type of value so this is
     ; guaranteed to work.
+    ; This check works because we are treating them as unsigned anyway,
+    ; otherwise we would need to check a different value.
     (when (> value #xFFFFFFFF)
       (error "Overflow behavior unimplemented. =(~%"))
     (set-register cpu target-register (wrap-word value))))
@@ -134,3 +136,19 @@
             (aref (cpu-registers cpu) target-register))))
     (setf (cpu-lo cpu) (ldb (byte 32 0) result))
     (setf (cpu-hi cpu) (ldb (byte 32 32) result))))
+
+(def-r-type sub #xFF22
+  (let ((result
+         (- (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
+            (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
+    ; TODO(Samantha): Is this really doing what I think it's doing?
+    ; TODO(Samantha): Figure out a testing framework for common lisp.
+    (when (< result #x-80000000)
+      (error "Signed overflow unimplemented. =(~%"))
+    (set-register cpu destination-register result)))
+
+(def-r-type subu #xFF23
+  (set-register
+   cpu destination-register
+   (wrap-word (- (aref (cpu-registers cpu) source-register)
+                 (aref (cpu-registers cpu) target-register)))))
