@@ -10,7 +10,7 @@
   (let ((value (+
                 (to-signed-byte-32 (sign-extend immediate))
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))))
-    (when (> value #xFFFFFFFF)
+    (when (> value #x7FFFFFFF)
       (error "Overflow behavior unimplemented. =(~%"))
     (set-register cpu target-register (wrap-word value))))
 
@@ -119,7 +119,7 @@
   (let ((value (+
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
                 (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
-    (when (> value #xFFFFFFFF)
+    (when (> value #x7FFFFFFF)
       (error "Overflow behavior unimplemented. =(~%"))
     (set-register cpu destination-register (wrap-word value))))
 
