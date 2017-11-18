@@ -3,16 +3,13 @@
 
 (def-i-type addi #x08
   (format t "Adding 0x~8,'0X to 0x~8,'0X Result is 0x~8,'0X~%"
-          (sign-extend immediate)
-          (aref (cpu-registers cpu) source-register)
+          (to-signed-byte-32 (sign-extend immediate))
+          (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
           (+ (sign-extend immediate)
                           (aref (cpu-registers cpu) source-register)))
-  (let ((value (+ (sign-extend immediate)
-                  (aref (cpu-registers cpu) source-register))))
-    ; TODO(Samantha): Consider declaring the type of value so this is
-    ; guaranteed to work.
-    ; This check works because we are treating them as unsigned anyway,
-    ; otherwise we would need to check a different value.
+  (let ((value (+
+                (to-signed-byte-32 (sign-extend immediate))
+                (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))))
     (when (> value #xFFFFFFFF)
       (error "Overflow behavior unimplemented. =(~%"))
     (set-register cpu target-register (wrap-word value))))
@@ -120,11 +117,11 @@
 
 (def-r-type add #xFF20
   (let ((value (+
-                (aref (cpu-registers cpu) source-register)
-                (aref (cpu-registers cpu) target-register))))
+                (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
+                (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
     (when (> value #xFFFFFFFF)
       (error "Overflow behavior unimplemented. =(~%"))
-    (set-register cpu destination-register value)))
+    (set-register cpu destination-register (wrap-word value))))
 
 (def-r-type addu #xFF21
   (set-register
