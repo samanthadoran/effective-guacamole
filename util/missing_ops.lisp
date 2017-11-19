@@ -3,6 +3,7 @@
 (defvar instructions-test (make-hash-table :test 'equal))
 
 ; Regulars
+; This instruction encodes four instructions.
 (setf (gethash #x01 instructions-test) (list "b-cond-z" 'b-cond-z))
 (setf (gethash #x02 instructions-test) (list "j" 'j))
 (setf (gethash #x03 instructions-test) (list "jal" 'jal))

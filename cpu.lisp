@@ -225,6 +225,8 @@
      :address (cpu-program-counter cpu)
      :masked-opcode masked-opcode
      ; If this instruction isn't in our list, it's illegal!
+     ; TODO(Samantha): Consider special casing b-cond-z so we get more useful
+     ; information.
      :mnemonic (or
                 (car (gethash masked-opcode instructions))
                 "Illegal Instruction!")

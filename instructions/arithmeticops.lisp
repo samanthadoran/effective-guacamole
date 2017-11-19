@@ -2,11 +2,6 @@
 (declaim (optimize (speed 3) (safety 1)))
 
 (def-i-type addi #x08
-  (format t "Adding 0x~8,'0X to 0x~8,'0X Result is 0x~8,'0X~%"
-          (to-signed-byte-32 (sign-extend immediate))
-          (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
-          (+ (sign-extend immediate)
-                          (aref (cpu-registers cpu) source-register)))
   (let ((value (+
                 (to-signed-byte-32 (sign-extend immediate))
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))))
