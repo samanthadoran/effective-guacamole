@@ -3,7 +3,7 @@
 (defvar instructions-test (make-hash-table :test 'equal))
 
 ; Regulars
-(setf (gethash #x01 instructions-test) (list "" 'b-cond-z))
+(setf (gethash #x01 instructions-test) (list "b-cond-z" 'b-cond-z))
 (setf (gethash #x02 instructions-test) (list "j" 'j))
 (setf (gethash #x03 instructions-test) (list "jal" 'jal))
 (setf (gethash #x04 instructions-test) (list "beq" 'beq))
@@ -85,6 +85,8 @@
 
 (setf (gethash #xFF2A instructions-test) (list "slt" 'slt))
 (setf (gethash #xFF2B instructions-test) (list "sltu" 'sltu))
+
+; TODO(Samantha): Add coprocessor specific opcodes like #xC0004
 
 ; TODO(Samantha): I think Alexandria has a function for this, consider just
 ; pulling it in as a dependency?
