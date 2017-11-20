@@ -109,12 +109,55 @@
 
 (def-r-type mtc0 #xC0004
   (case destination-register
+    ; TODO(Samantha): Handle anything other than $cop0_12.
+    ; BPC
+    (3
+     (when (/= (aref (cpu-registers cpu) target-register) 0)
+       (error "Tried to write 0x~8,'0x to $cop0_~d~%"
+              (aref (cpu-registers cpu) target-register)
+              destination-register)))
+    ; BDA
+    (5
+     (when (/= (aref (cpu-registers cpu) target-register) 0)
+       (error "Tried to write 0x~8,'0x to $cop0_~d~%"
+              (aref (cpu-registers cpu) target-register)
+              destination-register)))
+    ; JUMPDEST
+    (6
+      (when (/= (aref (cpu-registers cpu) target-register) 0)
+        (error "Tried to write 0x~8,'0x to $cop0_~d~%"
+               (aref (cpu-registers cpu) target-register)
+               destination-register)))
+    ; DCIC
+    (7
+      (when (/= (aref (cpu-registers cpu) target-register) 0)
+        (error "Tried to write 0x~8,'0x to $cop0_~d~%"
+               (aref (cpu-registers cpu) target-register)
+               destination-register)))
+    ; BDAM
+    (9
+      (when (/= (aref (cpu-registers cpu) target-register) 0)
+        (error "Tried to write 0x~8,'0x to $cop0_~d~%"
+               (aref (cpu-registers cpu) target-register)
+               destination-register)))
+    ; BPCM
+    (11
+      (when (/= (aref (cpu-registers cpu) target-register) 0)
+        (error "Tried to write 0x~8,'0x to $cop0_~d~%"
+               (aref (cpu-registers cpu) target-register)
+               destination-register)))
     (12
      (setf
       (cpu-status-register cpu)
       (aref (cpu-registers cpu) target-register)))
+    ; CAUSE
+    (13
+     (when (/= (aref (cpu-registers cpu) target-register) 0)
+       (error "Tried to write 0x~8,'0x to $cop0_~d~%"
+              (aref (cpu-registers cpu) target-register)
+              destination-register)))
     (otherwise
-     (error "Unknown write of 0x~8,'0X to cop0$~d~%"
+     (error "Unknown write of 0x~8,'0X to $cop0_~d~%"
              (aref (cpu-registers cpu) target-register)
              destination-register)
      0)))
