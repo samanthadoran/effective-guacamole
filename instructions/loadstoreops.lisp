@@ -34,6 +34,19 @@
          (sign-extend immediate)
          (aref (cpu-registers cpu) source-register))))))))
 
+(def-i-type lwl #x22
+  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+         (aligned-address (logand address #xFFFFFF00))
+         (aligned-word (read-cpu-word cpu aligned-address))
+         (current-value (aref (cpu-registers cpu) target-register)))
+    (set-register cpu target-register
+                  (case (ldb (byte 2 0) address)
+                    (0 (logior (logand current-value #x00FFFFFF) (wrap-word (ash aligned-word 24))))
+                    (1 (logior (logand current-value #x0000FFFF) (wrap-word (ash aligned-word 16))))
+                    (2 (logior (logand current-value #x000000FF) (wrap-word (ash aligned-word 8))))
+                    (3 (logior (logand current-value #x00000000) (wrap-word (ash aligned-word 0))))
+                    (otherwise (error "Unreachable.~%"))))))
+
 (def-i-type lw #x23
   (when (not (is-cache-isolated cpu))
     (set-register
@@ -67,6 +80,19 @@
         (sign-extend immediate)
         (aref (cpu-registers cpu) source-register)))))))
 
+(def-i-type lwr #x26
+  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+         (aligned-address (logand address #xFFFFFF00))
+         (aligned-word (read-cpu-word cpu aligned-address))
+         (current-value (aref (cpu-registers cpu) target-register)))
+    (set-register cpu target-register
+                  (case (ldb (byte 2 0) address)
+                    (0 (logior (logand current-value #x00000000) (wrap-word (ash aligned-word 0))))
+                    (1 (logior (logand current-value #xFF000000) (wrap-word (ash aligned-word -8))))
+                    (2 (logior (logand current-value #xFFFF0000) (wrap-word (ash aligned-word -16))))
+                    (3 (logior (logand current-value #xFFFFFF00) (wrap-word (ash aligned-word -24))))
+                    (otherwise (error "Unreachable.~%"))))))
+
 (def-i-type sb #x28
   (when (not (is-cache-isolated cpu))
     (write-cpu
@@ -96,6 +122,8 @@
        (sign-extend immediate)
        (aref (cpu-registers cpu) source-register)))
      (aref (cpu-registers cpu) target-register))))
+
+
 
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.

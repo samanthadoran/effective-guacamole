@@ -110,6 +110,22 @@
     (setf (cpu-lo cpu) (ldb (byte 32 0) result))
     (setf (cpu-hi cpu) (ldb (byte 32 32) result))))
 
+(def-r-type divu #xFF1B
+  (if (= (aref (cpu-registers cpu) target-register) 0)
+    ; Division by zero is not an exception, it's just
+    (progn
+     (setf (cpu-hi cpu) (aref (cpu-registers cpu) source-register))
+     (setf (cpu-lo cpu) #xFFFFFFFF))
+    (progn
+     (setf (cpu-hi cpu)
+           (floor
+            (aref (cpu-registers cpu) source-register)
+            (aref (cpu-registers cpu) target-register)))
+     (setf (cpu-lo cpu)
+           (mod
+            (aref (cpu-registers cpu) source-register)
+            (aref (cpu-registers cpu) target-register))))))
+
 (def-r-type add #xFF20
   (let ((value (+
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
