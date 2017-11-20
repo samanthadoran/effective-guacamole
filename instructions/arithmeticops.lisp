@@ -3,6 +3,8 @@
 
 (def-i-type addi #x08
   (let ((value (+
+                ; We need to change these to (signed-byte-32), otherwise the
+                ; overflow detection will just be wrong.
                 (to-signed-byte-32 (sign-extend immediate))
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))))
     (when (> value #x7FFFFFFF)
@@ -46,6 +48,8 @@
    cpu target-register
    (logxor immediate (aref (cpu-registers cpu) source-register))))
 
+; ASH is a bit of a misnomer in the following instructions, it maintains sign,
+; but for it to do that, we need to cast to a signed byte.
 (def-r-type sll #xFF00
   (set-register
    cpu destination-register
@@ -61,8 +65,6 @@
    cpu destination-register
    (wrap-word
     (ash
-      ; ASH is a bit of a misnomer here, it maintains sign, but for it to do
-      ; that, we need to cast to a signed byte.
      (to-signed-byte-32 (aref (cpu-registers cpu) target-register))
      (* -1 shift-amount)))))
 
@@ -126,32 +128,35 @@
     (if (and
          (= (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) -1)
          (= (aref (cpu-registers cpu) target-register) #x80000000))
+      ; The minimum value we can store in (signed-byte 32) is #x-7FFFFFFF. Once
+      ; again, this isn't an exception, it just puts specific values in hi and lo.
       (progn
        (setf (cpu-hi cpu) 0)
        (setf (cpu-lo cpu) #x80000000))
       (progn
        (setf (cpu-hi cpu)
-             (wrap-word (floor
-              (aref (cpu-registers cpu) source-register)
-              (aref (cpu-registers cpu) target-register))))
+             (wrap-word
+              (mod
+               (aref (cpu-registers cpu) source-register)
+               (aref (cpu-registers cpu) target-register))))
        (setf (cpu-lo cpu)
-             (mod
+             (floor
               (aref (cpu-registers cpu) source-register)
               (aref (cpu-registers cpu) target-register)))))))
 
 (def-r-type divu #xFF1B
   (if (= (aref (cpu-registers cpu) target-register) 0)
-    ; Division by zero is not an exception, it's just
+    ; Division by zero is not an exception, it's just the max value
     (progn
      (setf (cpu-hi cpu) (aref (cpu-registers cpu) source-register))
      (setf (cpu-lo cpu) #xFFFFFFFF))
     (progn
      (setf (cpu-hi cpu)
-           (floor
+           (mod
             (aref (cpu-registers cpu) source-register)
             (aref (cpu-registers cpu) target-register)))
      (setf (cpu-lo cpu)
-           (mod
+           (floor
             (aref (cpu-registers cpu) source-register)
             (aref (cpu-registers cpu) target-register))))))
 
