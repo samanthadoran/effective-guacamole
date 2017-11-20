@@ -110,6 +110,35 @@
     (setf (cpu-lo cpu) (ldb (byte 32 0) result))
     (setf (cpu-hi cpu) (ldb (byte 32 32) result))))
 
+(def-r-type div #xFF1A
+  (if (= (aref (cpu-registers cpu) target-register) 0)
+    ; Division by zero is not an exception, it's just the max/min value
+    (progn
+     (setf (cpu-hi cpu)
+           (wrap-word
+            (to-signed-byte-32 (aref (cpu-registers cpu) source-register))))
+     ; The sign of the result changes depending on the sign of the dividend
+     (setf (cpu-lo cpu)
+           (wrap-word
+            (if (>= (aref (cpu-registers cpu) source-register) 0)
+              #x7FFFFFFF
+              #x-80000000))))
+    (if (and
+         (= (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) -1)
+         (= (aref (cpu-registers cpu) target-register) #x80000000))
+      (progn
+       (setf (cpu-hi cpu) 0)
+       (setf (cpu-lo cpu) #x80000000))
+      (progn
+       (setf (cpu-hi cpu)
+             (wrap-word (floor
+              (aref (cpu-registers cpu) source-register)
+              (aref (cpu-registers cpu) target-register))))
+       (setf (cpu-lo cpu)
+             (mod
+              (aref (cpu-registers cpu) source-register)
+              (aref (cpu-registers cpu) target-register)))))))
+
 (def-r-type divu #xFF1B
   (if (= (aref (cpu-registers cpu) target-register) 0)
     ; Division by zero is not an exception, it's just
