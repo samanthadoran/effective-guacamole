@@ -229,7 +229,8 @@
      :operation (or
                  (cadr (gethash masked-opcode instructions))
                  (lambda (cpu instruction)
-                         (declare (ignore cpu instruction))
+                         (declare (ignore instruction))
+                         (trigger-exception cpu :reserved-instruction)
                          (values)))
      :address (cpu-program-counter cpu)
      :masked-opcode masked-opcode
@@ -280,8 +281,6 @@
    took."
   ; TODO(Samantha): Implement.
   (format t "~A~%" (instruction-information instruction))
-  (when (string= (instruction-mnemonic instruction) "Illegal Instruction!")
-    (error "Illegal instruction!~%~A~%" instruction))
   (funcall (instruction-operation instruction) cpu instruction)
   0)
 
