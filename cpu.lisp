@@ -42,6 +42,11 @@
 (defstruct cpu
   "A model PSX cpu"
   (program-counter 0 :type (unsigned-byte 32))
+  ; Used for exceptions exclusively.
+  (current-program-counter 0 :type (unsigned-byte 32))
+  (cause-register 0 :type (unsigned-byte 32))
+  (epc-register 0 :type (unsigned-byte 32))
+  (next-program-counter 0 :type (unsigned-byte 32))
   (registers
    (make-array 32 :element-type '(unsigned-byte 32))
    :type (simple-array (unsigned-byte 32) (32)))
@@ -75,9 +80,9 @@
   "Sets the cpu to the initial power up state."
   ; TODO(Samantha): Fully implement.
   (setf (cpu-program-counter cpu) bios-begin-address-kseg1)
-  (setf (cpu-next-instruction cpu) (decode cpu (fetch cpu)))
-  (setf (cpu-program-counter cpu)
-        (wrap-word (+ 4 (cpu-program-counter cpu)))))
+  (setf
+   (cpu-next-program-counter cpu)
+   (wrap-word (+ (cpu-program-counter cpu) 4))))
 
 ; TODO(Samantha): Move the following constants and two functions out to a
 ; separate file so that we don't have multiple copies in the codebase.
@@ -198,6 +203,10 @@
   (if (= (ldb (byte 2 30) instruction-as-word) 1)
     ; Coprocessor op. Mnemonic of #xC0NXX, where C0 means coprocessor, n is the
     ; coprocessor number, and xx is the cop opcode.
+    ; TODO(Samantha): RFE is another pain point like b-cond-z. It can have
+    ; multiple instructions encoded if we only use our pattern. Thankfully, the
+    ; other instructions it can encode are for virtual memory, which the psx
+    ; does not have. So, we should be safe to leave this out...?
     (logior
      #x000C0000
      (ash (ldb (byte 2 26) instruction-as-word) 8)
@@ -239,6 +248,32 @@
      :shift-amount (ldb (byte 5 6) instruction-as-word)
      :secondary-operation-code (ldb (byte 6 0) instruction-as-word))))
 
+; TODO(Samantha): Figure out how to make the following type declaration work.
+; (declaim (ftype (function (cpu &key (cause nil)) (unsigned-byte 32)) trigger-exception))
+(defun trigger-exception (cpu &key cause)
+  ; Exception handler address is determined by the 22nd (BEV) bit of
+  ; cop0_12 (status register)
+  (setf (cpu-program-counter cpu)
+        (if (ldb-test (byte 1 22) (cpu-status-register cpu))
+          #xBFC00180
+          #x80000080))
+  (setf (cpu-next-program-counter cpu) (wrap-word (+ (cpu-program-counter cpu) 4)))
+  (setf (cpu-epc-register cpu) (cpu-current-program-counter cpu))
+  (setf (cpu-cause-register cpu)
+        (ash
+         (case cause
+           (:syscall #x8)
+           (:breakpoint #x9)
+           (:reserved-instruction #xA)
+           (:coprocessor-unusable #xB)
+           (:arithmetic-overflow #xC)
+           (otherwise (error "Unimplemented cause ~A" cause)))
+         2))
+  ; TODO(Samantha): Understand this mess better.
+  (setf
+   (ldb (byte 6 0) (cpu-status-register cpu))
+   (ldb (byte 6 0) (ash (ldb (byte 6 0) (cpu-status-register cpu)) 2))))
+
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)
   "Executes a single instruction and returns the number of cycles that this
@@ -259,8 +294,8 @@
   ; TODO(Samantha): The next instruction after a branch should have the same
   ; address as the branch instruction itself. Exceptions add another
   ; complication to this process.
-  (let ((instruction (cpu-next-instruction cpu)))
-    (setf (cpu-next-instruction cpu) (decode cpu (fetch cpu)))
-    (setf (cpu-program-counter cpu)
-          (wrap-word (+ 4 (cpu-program-counter cpu))))
+  (let ((instruction (decode cpu (fetch cpu))))
+    (setf (cpu-program-counter cpu) (cpu-next-program-counter cpu))
+    (setf (cpu-next-program-counter cpu)
+          (wrap-word (+ 4 (cpu-next-program-counter cpu))))
     (execute cpu instruction)))

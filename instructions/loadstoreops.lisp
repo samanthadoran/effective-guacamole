@@ -34,6 +34,7 @@
          (sign-extend immediate)
          (aref (cpu-registers cpu) source-register))))))))
 
+; TODO(Samantha): Shouldn't this and lwr be cache conscious?
 (def-i-type lwl #x22
   (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
@@ -113,6 +114,19 @@
        (aref (cpu-registers cpu) source-register)))
      (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))
 
+(def-i-type swl #x2A
+  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+         (aligned-address (logand address #xFFFFFF00))
+         (aligned-word (read-cpu-word cpu aligned-address))
+         (value (aref (cpu-registers cpu) target-register)))
+    (write-cpu-word cpu aligned-address
+                    (case (ldb (byte 2 0) address)
+                      (0 (logior (logand aligned-word #xFFFFFF00) (wrap-word (ash value 24))))
+                      (1 (logior (logand aligned-word #xFFFF0000) (wrap-word (ash value 16))))
+                      (2 (logior (logand aligned-word #xFF000000) (wrap-word (ash value 8))))
+                      (3 (logior (logand aligned-word #x00000000) (wrap-word (ash value 0))))
+                      (otherwise (error "Unreachable.~%"))))))
+
 (def-i-type sw #x2B
   (when (not (is-cache-isolated cpu))
     (write-cpu-word
@@ -123,7 +137,46 @@
        (aref (cpu-registers cpu) source-register)))
      (aref (cpu-registers cpu) target-register))))
 
+(def-i-type swr #x2E
+  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+         (aligned-address (logand address #xFFFFFF00))
+         (aligned-word (read-cpu-word cpu aligned-address))
+         (value (aref (cpu-registers cpu) target-register)))
+    (write-cpu-word cpu aligned-address
+                    (case (ldb (byte 2 0) address)
+                      (0 (logior (logand aligned-word #x00000000) (wrap-word (ash value 0))))
+                      (1 (logior (logand aligned-word #x000000FF) (wrap-word (ash value 8))))
+                      (2 (logior (logand aligned-word #x0000FFFF) (wrap-word (ash value 16))))
+                      (3 (logior (logand aligned-word #x00FFFFFF) (wrap-word (ash value 24))))
+                      (otherwise (error "Unreachable.~%"))))))
 
+; TODO(Samantha): CPU in the following eight functions is only referenced to
+; quash a warning, implement them so we can remove this ugly hack.
+(def-i-type lwc0 #x30
+  (trigger-exception cpu :cause :coprocessor-unusable))
+
+(def-i-type lwc1 #x31
+  (trigger-exception cpu :cause :coprocessor-unusable))
+
+(def-i-type lwc2 #x32
+  cpu
+  (error "lwc2 not yet implemented!~%"))
+
+(def-i-type lwc3 #x33
+  (trigger-exception cpu :cause :coprocessor-unusable))
+
+(def-i-type swc0 #x38
+  (trigger-exception cpu :cause :coprocessor-unusable))
+
+(def-i-type swc1 #x39
+  (trigger-exception cpu :cause :coprocessor-unusable))
+
+(def-i-type swc2 #x3A
+  cpu
+  (error "swc2 not yet implemented!~%"))
+
+(def-i-type swc3 #x3B
+  (trigger-exception cpu :cause :coprocessor-unusable))
 
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.
@@ -131,6 +184,8 @@
   (set-register cpu target-register
                 (case destination-register
                   (12 (cpu-status-register cpu))
+                  (13 (cpu-cause-register cpu))
+                  (14 (cpu-epc-register cpu))
                   (otherwise
                    (error "Unknown read to cop0$~d~%" destination-register)
                    0))))

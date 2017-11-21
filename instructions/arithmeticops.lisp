@@ -8,7 +8,7 @@
                 (to-signed-byte-32 (sign-extend immediate))
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))))
     (when (> value #x7FFFFFFF)
-      (error "Overflow behavior unimplemented. =(~%"))
+      (trigger-exception cpu :cause :arithmetic-overflow))
     (set-register cpu target-register (wrap-word value))))
 
 (def-i-type addiu #x09
@@ -165,7 +165,7 @@
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
                 (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
     (when (> value #x7FFFFFFF)
-      (error "Overflow behavior unimplemented. =(~%"))
+      (trigger-exception cpu :cause :arithmetic-overflow))
     (set-register cpu destination-register (wrap-word value))))
 
 (def-r-type addu #xFF21
@@ -183,7 +183,7 @@
     ; TODO(Samantha): Is this really doing what I think it's doing?
     ; TODO(Samantha): Figure out a testing framework for common lisp.
     (when (< result #x-80000000)
-      (error "Signed overflow unimplemented. =(~%"))
+      (trigger-exception cpu :cause :arithmetic-overflow))
     (set-register cpu destination-register result)))
 
 (def-r-type subu #xFF23
