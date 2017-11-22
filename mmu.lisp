@@ -77,8 +77,6 @@
   (declare (ignore psx))
   ; TODO(Samantha): Implement more places, simplify the cond.
   (cond
-    ((/= 0 (mod address 2))
-     (error "Half-word read from 0x~8,'0x is unaligned!~%" address))
     ; Unimplemented.
     (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address))))
 
@@ -87,8 +85,6 @@
 (defun load-word* (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
   (cond
-    ((/= 0 (mod address 4))
-     (error "Word read from 0x~8,'0x is unaligned!~%" address))
     ; BIOS
     ((in-range bios-begin-address-kseg1
                (array-dimension (psx-bios-rom psx) 0)
@@ -117,8 +113,6 @@
 (defun write-half-word* (psx address value)
   (declare (ignore psx value))
   (cond
-    ((/= 0 (mod address 2))
-     (error "Half-word write to 0x~8,'0x is unaligned!~%" address))
     ; Unimplemented.
     (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address))))
 
@@ -127,8 +121,6 @@
         write-word*))
 (defun write-word* (psx address value)
   (cond
-    ((/= 0 (mod address 4))
-     (error "Word write to 0x~8,'0x is unaligned!~%" address))
     ((in-range memory-control-begin memory-control-size address)
      (cond
        ; Expansion base 1 register

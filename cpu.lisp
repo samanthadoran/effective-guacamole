@@ -263,6 +263,8 @@
   (setf (cpu-cause-register cpu)
         (ash
          (case cause
+           (:address-load-error #x4)
+           (:address-write-error #x5)
            (:syscall #x8)
            (:breakpoint #x9)
            (:reserved-instruction #xA)
@@ -273,7 +275,7 @@
   ; TODO(Samantha): Understand this mess better.
   (setf
    (ldb (byte 6 0) (cpu-status-register cpu))
-   (ldb (byte 6 0) (ash (ldb (byte 6 0) (cpu-status-register cpu)) 2))))
+   (ldb (byte 6 0) (ash (cpu-status-register cpu) 2))))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)

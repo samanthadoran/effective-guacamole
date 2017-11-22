@@ -23,16 +23,17 @@
          (aref (cpu-registers cpu) source-register))))))))
 
 (def-i-type lh #x21
-  (when (not (is-cache-isolated cpu))
-    (set-register
-     cpu target-register
-     (sign-extend
-      (read-cpu-half-word
-       cpu
-       (wrap-word
-        (+
-         (sign-extend immediate)
-         (aref (cpu-registers cpu) source-register))))))))
+  (let ((address
+         (wrap-word
+          (+
+           (sign-extend immediate)
+           (aref (cpu-registers cpu) source-register)))))
+    (if (/= 0 (mod address 2))
+      (trigger-exception cpu :cause :address-load-error)
+      (when (not (is-cache-isolated cpu))
+        (set-register
+         cpu target-register
+         (sign-extend (read-cpu-half-word cpu address)))))))
 
 ; TODO(Samantha): Shouldn't this and lwr be cache conscious?
 (def-i-type lwl #x22
@@ -49,15 +50,17 @@
                     (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type lw #x23
-  (when (not (is-cache-isolated cpu))
-    (set-register
-     cpu target-register
-     (read-cpu-word
-      cpu
-      (wrap-word
-       (+
-        (sign-extend immediate)
-        (aref (cpu-registers cpu) source-register)))))))
+  (let ((address
+         (wrap-word
+          (+
+           (sign-extend immediate)
+           (aref (cpu-registers cpu) source-register)))))
+    (if (/= 0 (mod address 4))
+      (trigger-exception cpu :cause :address-load-error)
+      (when (not (is-cache-isolated cpu))
+        (set-register
+         cpu target-register
+         (read-cpu-word cpu address))))))
 
 (def-i-type lbu #x24
   (when (not (is-cache-isolated cpu))
@@ -71,15 +74,17 @@
         (aref (cpu-registers cpu) source-register)))))))
 
 (def-i-type lhu #x25
-  (when (not (is-cache-isolated cpu))
-    (set-register
-     cpu target-register
-     (read-cpu-half-word
-      cpu
-      (wrap-word
-       (+
-        (sign-extend immediate)
-        (aref (cpu-registers cpu) source-register)))))))
+  (let ((address
+         (wrap-word
+          (+
+           (sign-extend immediate)
+           (aref (cpu-registers cpu) source-register)))))
+    (if (/= 0 (mod address 2))
+      (trigger-exception cpu :cause :load-address-error)
+      (when (not (is-cache-isolated cpu))
+        (set-register
+         cpu target-register
+         (read-cpu-half-word cpu address))))))
 
 (def-i-type lwr #x26
   (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
@@ -105,14 +110,18 @@
      (ldb (byte 8 0) (aref (cpu-registers cpu) target-register)))))
 
 (def-i-type sh #x29
-  (when (not (is-cache-isolated cpu))
-    (write-cpu-half-word
-     cpu
-     (wrap-word
-      (+
-       (sign-extend immediate)
-       (aref (cpu-registers cpu) source-register)))
-     (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))
+  (let ((address
+         (wrap-word
+          (+
+           (sign-extend immediate)
+           (aref (cpu-registers cpu) source-register)))))
+    (if (/= 0 (mod address 2))
+      (trigger-exception cpu :cause :address-write-error)
+      (when (not (is-cache-isolated cpu))
+        (write-cpu-half-word
+         cpu
+         address
+         (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))))
 
 (def-i-type swl #x2A
   (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
@@ -128,14 +137,18 @@
                       (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type sw #x2B
-  (when (not (is-cache-isolated cpu))
-    (write-cpu-word
-     cpu
-     (wrap-word
-      (+
-       (sign-extend immediate)
-       (aref (cpu-registers cpu) source-register)))
-     (aref (cpu-registers cpu) target-register))))
+  (let ((address
+         (wrap-word
+          (+
+           (sign-extend immediate)
+           (aref (cpu-registers cpu) source-register)))))
+    (when (not (is-cache-isolated cpu))
+      (if (/= 0 (mod address 4))
+        (trigger-exception cpu :cause :address-write-error)
+        (write-cpu-word
+         cpu
+         address
+         (aref (cpu-registers cpu) target-register))))))
 
 (def-i-type swr #x2E
   (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
