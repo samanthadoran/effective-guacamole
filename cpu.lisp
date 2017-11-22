@@ -283,7 +283,9 @@
    took."
   ; TODO(Samantha): Implement.
   (format t "~A~%" (instruction-information instruction))
-  (funcall (instruction-operation instruction) cpu instruction)
+  (if (/= 0 (mod (cpu-current-program-counter cpu) 4))
+    (trigger-exception cpu :cause :address-load-error)
+    (funcall (instruction-operation instruction) cpu instruction))
   0)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
@@ -296,6 +298,7 @@
   ; address as the branch instruction itself. Exceptions add another
   ; complication to this process.
   (let ((instruction (decode cpu (fetch cpu))))
+    (setf (cpu-current-program-counter cpu) (cpu-program-counter cpu))
     (setf (cpu-program-counter cpu) (cpu-next-program-counter cpu))
     (setf (cpu-next-program-counter cpu)
           (wrap-word (+ 4 (cpu-next-program-counter cpu))))
