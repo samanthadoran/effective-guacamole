@@ -1,5 +1,6 @@
 (defpackage #:psx-cpu
   (:nicknames #:cpu)
+  ; TODO(Samantha): Should I be using :psx-coprocessor0 as well?
   (:use :cl)
   (:export #:cpu #:make-cpu
            #:cpu-memory-get-byte #:cpu-memory-set-byte
@@ -257,8 +258,9 @@
      :shift-amount (ldb (byte 5 6) instruction-as-word)
      :secondary-operation-code (ldb (byte 6 0) instruction-as-word))))
 
-; TODO(Samantha): Figure out how to make the following type declaration work.
-; (declaim (ftype (function (cpu &key (cause nil)) (unsigned-byte 32)) trigger-exception))
+(declaim (ftype (function (cpu &key (:cause keyword))
+                          (unsigned-byte 32))
+                trigger-exception))
 (defun trigger-exception (cpu &key cause)
   ; Exception handler address is determined by the 22nd (BEV) bit of
   ; cop0_12 (status register)
