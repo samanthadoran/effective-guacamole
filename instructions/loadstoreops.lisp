@@ -2,7 +2,7 @@
 (declaim (optimize (speed 3) (safety 1)))
 
 (defun is-cache-isolated (cpu)
-  (ldb-test (byte 1 16) (cpu-status-register cpu)))
+  (ldb-test (byte 1 16) (cop0:coprocessor0-status-register (cpu-cop0 cpu))))
 
 (def-i-type lui #x0F
   (setf
@@ -196,9 +196,9 @@
 (def-r-type mfc0 #xC0000
   (set-register cpu target-register
                 (case destination-register
-                  (12 (cpu-status-register cpu))
-                  (13 (cpu-cause-register cpu))
-                  (14 (cpu-epc-register cpu))
+                  (12 (cop0:coprocessor0-status-register (cpu-cop0 cpu)))
+                  (13 (cop0:coprocessor0-cause-register (cpu-cop0 cpu)))
+                  (14 (cop0:coprocessor0-epc-register (cpu-cop0 cpu)))
                   (otherwise
                    (error "Unknown read to cop0$~d~%" destination-register)
                    0))))
@@ -244,7 +244,7 @@
                destination-register)))
     (12
      (setf
-      (cpu-status-register cpu)
+      (cop0:coprocessor0-status-register (cpu-cop0 cpu))
       (aref (cpu-registers cpu) target-register)))
     ; CAUSE
     (13

@@ -44,17 +44,17 @@
   (program-counter 0 :type (unsigned-byte 32))
   ; Used for exceptions exclusively.
   (current-program-counter 0 :type (unsigned-byte 32))
-  (cause-register 0 :type (unsigned-byte 32))
-  (epc-register 0 :type (unsigned-byte 32))
+  ; (cause-register 0 :type (unsigned-byte 32))
+  ; (epc-register 0 :type (unsigned-byte 32))
   (next-program-counter 0 :type (unsigned-byte 32))
   (registers
    (make-array 32 :element-type '(unsigned-byte 32))
    :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
+  (cop0 (cop0:make-coprocessor0) :type cop0:coprocessor0)
   ; TODO(Samantha): Move this out to a coprocessor0 struct for clarity.
-  (status-register 0 :type (unsigned-byte 32))
-  (next-instruction (make-instruction) :type instruction)
+  ; (status-register 0 :type (unsigned-byte 32))
   ; TODO(Samantha): These are awful and shouldn't really be necessary.
   (memory-get-byte
    (lambda (address) (declare (ignore address)) 0)
@@ -255,12 +255,16 @@
   ; Exception handler address is determined by the 22nd (BEV) bit of
   ; cop0_12 (status register)
   (setf (cpu-program-counter cpu)
-        (if (ldb-test (byte 1 22) (cpu-status-register cpu))
+        (if (ldb-test (byte 1 22) (cop0:coprocessor0-status-register (cpu-cop0 cpu)))
           #xBFC00180
           #x80000080))
-  (setf (cpu-next-program-counter cpu) (wrap-word (+ (cpu-program-counter cpu) 4)))
-  (setf (cpu-epc-register cpu) (cpu-current-program-counter cpu))
-  (setf (cpu-cause-register cpu)
+  (setf
+   (cpu-next-program-counter cpu)
+   (wrap-word (+ (cpu-program-counter cpu) 4)))
+  (setf
+   (cop0:coprocessor0-epc-register (cpu-cop0 cpu))
+   (cpu-current-program-counter cpu))
+  (setf (cop0:coprocessor0-cause-register (cpu-cop0 cpu))
         (ash
          (case cause
            (:address-load-error #x4)
@@ -274,8 +278,8 @@
          2))
   ; TODO(Samantha): Understand this mess better.
   (setf
-   (ldb (byte 6 0) (cpu-status-register cpu))
-   (ldb (byte 6 0) (ash (cpu-status-register cpu) 2))))
+   (ldb (byte 6 0) (cop0:coprocessor0-status-register (cpu-cop0 cpu)))
+   (ldb (byte 6 0) (ash (cop0:coprocessor0-status-register (cpu-cop0 cpu)) 2))))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)

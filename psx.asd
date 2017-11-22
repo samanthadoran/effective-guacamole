@@ -1,7 +1,9 @@
 (in-package #:asdf-user)
 
 (defsystem #:psx
-  :components ((:file "cpu")
+  :components (
+               (:file "cop0")
+               (:file "cpu" :depends-on ("cop0"))
                (:file "console" :depends-on ("cpu"))
                (:file "mmu" :depends-on ("console"))
                (:file "instructions/instruction-macros")
