@@ -25,7 +25,9 @@
 
 ; TODO(Samantha): I think these mirror sizes are wrong, also we are blatantly
 ; ignoring KSEG2.
-(declaim (ftype (function ((unsigned-byte 32)) keyword) determine-segment))
+(declaim (ftype (function ((unsigned-byte 32))
+                          keyword)
+                determine-segment))
 (defun determine-segment (address)
   (cond
     ((in-range kuseg-base mirror-size address) :kuseg)
@@ -33,7 +35,10 @@
     ((in-range kseg1-base mirror-size address) :kseg1)
     (t :invalid-segment)))
 
-(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))
+(declaim (ftype (function ((simple-array (unsigned-byte 8))
+                           (unsigned-byte 32)
+                           (unsigned-byte 32))
+                          (unsigned-byte 32))
                 write-word-to-byte-array))
 (defun write-word-to-byte-array (array offset word)
   (setf
@@ -51,7 +56,8 @@
   word)
 
 ; TODO(Samantha): Consider regions in these functions.
-(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32)) (unsigned-byte 32))
+(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
+                          (unsigned-byte 32))
                 read-word-from-byte-array))
 (defun read-word-from-byte-array (array offset)
   "Performs the necessary shifting to reconstruct a word from a byte-array

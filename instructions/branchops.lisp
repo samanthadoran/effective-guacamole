@@ -63,8 +63,10 @@
 ; Move this somewhere more appropriate?
 (def-i-type rfe #xC0010
   (setf
-   (ldb (byte 6 0) (cop0:coprocessor0-status-register (cpu-cop0 cpu)))
-   (ldb (byte 6 0) (ash (ldb (byte 6 0) (cop0:coprocessor0-status-register (cpu-cop0 cpu))) -2))))
+   (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
+   (ldb
+    (byte 6 0)
+    (ash (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu))) -2))))
 
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))
                 branch))

@@ -52,8 +52,8 @@
    :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
-  (cop0 (cop0:make-coprocessor0) :type cop0:coprocessor0)
-  ; TODO(Samantha): Move this out to a coprocessor0 struct for clarity.
+  (cop0 (cop0:make-cop0) :type cop0:cop0)
+  ; TODO(Samantha): Move this out to a cop0 struct for clarity.
   ; (status-register 0 :type (unsigned-byte 32))
   ; TODO(Samantha): These are awful and shouldn't really be necessary.
   (memory-get-byte
@@ -161,32 +161,38 @@
     to-be-converted))
 
 ; TODO(Samantha): These six functions should really be wrapped into the mmu.
-(declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 8))
+(declaim (ftype (function (cpu (unsigned-byte 32))
+                          (unsigned-byte 8))
                 read-cpu))
 (defun read-cpu-byte (cpu address)
   (funcall (cpu-memory-get-byte cpu) address))
 
-(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
+(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 8))
+                          (unsigned-byte 8))
                 write-cpu))
 (defun write-cpu-byte (cpu address value)
   (funcall (cpu-memory-set-byte cpu) address value))
 
-(declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 16))
+(declaim (ftype (function (cpu (unsigned-byte 32))
+                          (unsigned-byte 16))
                 read-cpu-half-word))
 (defun read-cpu-half-word (cpu address)
   (funcall (cpu-memory-get-half-word cpu) address))
 
-(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16))
+(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 16))
+                          (unsigned-byte 16))
                 write-cpu-half-word))
 (defun write-cpu-half-word (cpu address value)
   (funcall (cpu-memory-set-half-word cpu) address value))
 
-(declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))
+(declaim (ftype (function (cpu (unsigned-byte 32))
+                          (unsigned-byte 32))
                 read-cpu-word))
 (defun read-cpu-word (cpu address)
   (funcall (cpu-memory-get-word cpu) address))
 
-(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))
+(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
                 write-cpu-word))
 (defun write-cpu-word (cpu address value)
   (funcall (cpu-memory-set-word cpu) address value))
@@ -196,7 +202,9 @@
   "Retrieves an instruction for execution as a 32 bit word."
   (read-cpu-word cpu (cpu-program-counter cpu)))
 
-(declaim (ftype (function ((unsigned-byte 32)) (unsigned-byte 32)) get-masked-opcode))
+(declaim (ftype (function ((unsigned-byte 32))
+                          (unsigned-byte 32))
+                get-masked-opcode))
 (defun get-masked-opcode (instruction-as-word)
   "Creates a shorter mnemonic for opcodes that's stripped of non-general
    information."
@@ -255,16 +263,16 @@
   ; Exception handler address is determined by the 22nd (BEV) bit of
   ; cop0_12 (status register)
   (setf (cpu-program-counter cpu)
-        (if (ldb-test (byte 1 22) (cop0:coprocessor0-status-register (cpu-cop0 cpu)))
+        (if (ldb-test (byte 1 22) (cop0:cop0-status-register (cpu-cop0 cpu)))
           #xBFC00180
           #x80000080))
   (setf
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) 4)))
   (setf
-   (cop0:coprocessor0-epc-register (cpu-cop0 cpu))
+   (cop0:cop0-epc-register (cpu-cop0 cpu))
    (cpu-current-program-counter cpu))
-  (setf (cop0:coprocessor0-cause-register (cpu-cop0 cpu))
+  (setf (cop0:cop0-cause-register (cpu-cop0 cpu))
         (ash
          (case cause
            (:address-load-error #x4)
@@ -278,8 +286,8 @@
          2))
   ; TODO(Samantha): Understand this mess better.
   (setf
-   (ldb (byte 6 0) (cop0:coprocessor0-status-register (cpu-cop0 cpu)))
-   (ldb (byte 6 0) (ash (cop0:coprocessor0-status-register (cpu-cop0 cpu)) 2))))
+   (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
+   (ldb (byte 6 0) (ash (cop0:cop0-status-register (cpu-cop0 cpu)) 2))))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)

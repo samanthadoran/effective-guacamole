@@ -2,7 +2,7 @@
 (declaim (optimize (speed 3) (safety 1)))
 
 (defun is-cache-isolated (cpu)
-  (ldb-test (byte 1 16) (cop0:coprocessor0-status-register (cpu-cop0 cpu))))
+  (ldb-test (byte 1 16) (cop0:cop0-status-register (cpu-cop0 cpu))))
 
 (def-i-type lui #x0F
   (setf
@@ -37,16 +37,28 @@
 
 ; TODO(Samantha): Shouldn't this and lwr be cache conscious?
 (def-i-type lwl #x22
-  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+  (let* ((address
+          (wrap-word
+           (+
+            (aref (cpu-registers cpu) source-register)
+            (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
          (aligned-word (read-cpu-word cpu aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
     (set-register cpu target-register
                   (case (ldb (byte 2 0) address)
-                    (0 (logior (logand current-value #x00FFFFFF) (wrap-word (ash aligned-word 24))))
-                    (1 (logior (logand current-value #x0000FFFF) (wrap-word (ash aligned-word 16))))
-                    (2 (logior (logand current-value #x000000FF) (wrap-word (ash aligned-word 8))))
-                    (3 (logior (logand current-value #x00000000) (wrap-word (ash aligned-word 0))))
+                    (0 (logior
+                        (logand current-value #x00FFFFFF)
+                        (wrap-word (ash aligned-word 24))))
+                    (1 (logior
+                        (logand current-value #x0000FFFF)
+                        (wrap-word (ash aligned-word 16))))
+                    (2 (logior
+                        (logand current-value #x000000FF)
+                        (wrap-word (ash aligned-word 8))))
+                    (3 (logior
+                        (logand current-value #x00000000)
+                        (wrap-word (ash aligned-word 0))))
                     (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type lw #x23
@@ -87,16 +99,28 @@
          (read-cpu-half-word cpu address))))))
 
 (def-i-type lwr #x26
-  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+  (let* ((address
+          (wrap-word
+           (+
+            (aref (cpu-registers cpu) source-register)
+            (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
          (aligned-word (read-cpu-word cpu aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
     (set-register cpu target-register
                   (case (ldb (byte 2 0) address)
-                    (0 (logior (logand current-value #x00000000) (wrap-word (ash aligned-word 0))))
-                    (1 (logior (logand current-value #xFF000000) (wrap-word (ash aligned-word -8))))
-                    (2 (logior (logand current-value #xFFFF0000) (wrap-word (ash aligned-word -16))))
-                    (3 (logior (logand current-value #xFFFFFF00) (wrap-word (ash aligned-word -24))))
+                    (0 (logior
+                        (logand current-value #x00000000)
+                        (wrap-word (ash aligned-word 0))))
+                    (1 (logior
+                        (logand current-value #xFF000000)
+                        (wrap-word (ash aligned-word -8))))
+                    (2 (logior
+                        (logand current-value #xFFFF0000)
+                        (wrap-word (ash aligned-word -16))))
+                    (3 (logior
+                        (logand current-value #xFFFFFF00)
+                        (wrap-word (ash aligned-word -24))))
                     (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type sb #x28
@@ -124,16 +148,28 @@
          (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))))
 
 (def-i-type swl #x2A
-  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+  (let* ((address
+          (wrap-word
+           (+
+            (aref (cpu-registers cpu) source-register)
+            (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
          (aligned-word (read-cpu-word cpu aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
     (write-cpu-word cpu aligned-address
                     (case (ldb (byte 2 0) address)
-                      (0 (logior (logand aligned-word #xFFFFFF00) (wrap-word (ash value 24))))
-                      (1 (logior (logand aligned-word #xFFFF0000) (wrap-word (ash value 16))))
-                      (2 (logior (logand aligned-word #xFF000000) (wrap-word (ash value 8))))
-                      (3 (logior (logand aligned-word #x00000000) (wrap-word (ash value 0))))
+                      (0 (logior
+                          (logand aligned-word #xFFFFFF00)
+                          (wrap-word (ash value 24))))
+                      (1 (logior
+                          (logand aligned-word #xFFFF0000)
+                          (wrap-word (ash value 16))))
+                      (2 (logior
+                          (logand aligned-word #xFF000000)
+                          (wrap-word (ash value 8))))
+                      (3 (logior
+                          (logand aligned-word #x00000000)
+                          (wrap-word (ash value 0))))
                       (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type sw #x2B
@@ -151,16 +187,28 @@
          (aref (cpu-registers cpu) target-register))))))
 
 (def-i-type swr #x2E
-  (let* ((address (wrap-word (+ (aref (cpu-registers cpu) source-register) (sign-extend immediate))))
+  (let* ((address
+          (wrap-word
+           (+
+            (aref (cpu-registers cpu) source-register)
+            (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
          (aligned-word (read-cpu-word cpu aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
     (write-cpu-word cpu aligned-address
                     (case (ldb (byte 2 0) address)
-                      (0 (logior (logand aligned-word #x00000000) (wrap-word (ash value 0))))
-                      (1 (logior (logand aligned-word #x000000FF) (wrap-word (ash value 8))))
-                      (2 (logior (logand aligned-word #x0000FFFF) (wrap-word (ash value 16))))
-                      (3 (logior (logand aligned-word #x00FFFFFF) (wrap-word (ash value 24))))
+                      (0 (logior
+                          (logand aligned-word #x00000000)
+                          (wrap-word (ash value 0))))
+                      (1 (logior
+                          (logand aligned-word #x000000FF)
+                          (wrap-word (ash value 8))))
+                      (2 (logior
+                          (logand aligned-word #x0000FFFF)
+                          (wrap-word (ash value 16))))
+                      (3 (logior
+                          (logand aligned-word #x00FFFFFF)
+                          (wrap-word (ash value 24))))
                       (otherwise (error "Unreachable.~%"))))))
 
 ; TODO(Samantha): CPU in the following eight functions is only referenced to
@@ -196,9 +244,9 @@
 (def-r-type mfc0 #xC0000
   (set-register cpu target-register
                 (case destination-register
-                  (12 (cop0:coprocessor0-status-register (cpu-cop0 cpu)))
-                  (13 (cop0:coprocessor0-cause-register (cpu-cop0 cpu)))
-                  (14 (cop0:coprocessor0-epc-register (cpu-cop0 cpu)))
+                  (12 (cop0:cop0-status-register (cpu-cop0 cpu)))
+                  (13 (cop0:cop0-cause-register (cpu-cop0 cpu)))
+                  (14 (cop0:cop0-epc-register (cpu-cop0 cpu)))
                   (otherwise
                    (error "Unknown read to cop0$~d~%" destination-register)
                    0))))
@@ -244,7 +292,7 @@
                destination-register)))
     (12
      (setf
-      (cop0:coprocessor0-status-register (cpu-cop0 cpu))
+      (cop0:cop0-status-register (cpu-cop0 cpu))
       (aref (cpu-registers cpu) target-register)))
     ; CAUSE
     (13
