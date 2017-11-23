@@ -125,7 +125,7 @@
 
 (def-i-type sb #x28
   (when (not (is-cache-isolated cpu))
-    (write-cpu
+    (write-cpu-byte
      cpu
      (wrap-word
       (+
@@ -211,8 +211,8 @@
                           (wrap-word (ash value 24))))
                       (otherwise (error "Unreachable.~%"))))))
 
-; TODO(Samantha): CPU in the following eight functions is only referenced to
-; quash a warning, implement them so we can remove this ugly hack.
+; TODO(Samantha): CPU in lwc2 and swc2 is only referenced to quash a warning,
+; implement them so we can remove this ugly hack.
 (def-i-type lwc0 #x30
   (trigger-exception cpu :cause :coprocessor-unusable))
 

@@ -29,15 +29,23 @@
            (values))
    :type (function (cpu instruction) (values &optional)))
   (mnemonic "" :type string)
+  ; Bits [31:26]
   (operation-code 0 :type (unsigned-byte 6))
   ; TODO(Samantha): Consider changing the following two values to denote that
   ; they are indexes
+  ; Bits [25:21]
   (source-register 0 :type (unsigned-byte 5))
+  ; Bits [20:16]
   (target-register 0 :type (unsigned-byte 5))
+  ; Bits [15:0]
   (immediate-value 0 :type (unsigned-byte 16))
+  ; Bits [25:0]
   (jump-target 0 :type (unsigned-byte 26))
+  ; Bits [15:11]
   (destination-register 0 :type (unsigned-byte 5))
+  ; Bits [10:6]
   (shift-amount 0 :type (unsigned-byte 5))
+  ; Bits [5:0]
   (secondary-operation-code 0 :type (unsigned-byte 6)))
 
 (defstruct cpu
@@ -45,8 +53,6 @@
   (program-counter 0 :type (unsigned-byte 32))
   ; Used for exceptions exclusively.
   (current-program-counter 0 :type (unsigned-byte 32))
-  ; (cause-register 0 :type (unsigned-byte 32))
-  ; (epc-register 0 :type (unsigned-byte 32))
   (next-program-counter 0 :type (unsigned-byte 32))
   (registers
    (make-array 32 :element-type '(unsigned-byte 32))
@@ -54,8 +60,6 @@
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
   (cop0 (cop0:make-cop0) :type cop0:cop0)
-  ; TODO(Samantha): Move this out to a cop0 struct for clarity.
-  ; (status-register 0 :type (unsigned-byte 32))
   ; TODO(Samantha): These are awful and shouldn't really be necessary.
   (memory-get-byte
    (lambda (address) (declare (ignore address)) 0)
@@ -148,7 +152,7 @@
 (declaim (ftype (function ((signed-byte 64)) (unsigned-byte 32))
                 wrap-word))
 (defun wrap-word (to-be-wrapped)
-  "Takes up to a 64 bit unsigned int and returns the truncated 32 bit
+  "Takes up to a 64 bit signed int and returns the truncated 32 bit
    representation."
   (ldb (byte 32 0) to-be-wrapped))
 
@@ -164,13 +168,13 @@
 ; TODO(Samantha): These six functions should really be wrapped into the mmu.
 (declaim (ftype (function (cpu (unsigned-byte 32))
                           (unsigned-byte 8))
-                read-cpu))
+                read-cpu-byte))
 (defun read-cpu-byte (cpu address)
   (funcall (cpu-memory-get-byte cpu) address))
 
 (declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 8))
                           (unsigned-byte 8))
-                write-cpu))
+                write-cpu-byte))
 (defun write-cpu-byte (cpu address value)
   (funcall (cpu-memory-set-byte cpu) address value))
 
