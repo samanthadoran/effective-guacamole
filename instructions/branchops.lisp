@@ -4,8 +4,8 @@
 (def-i-type b-cond-z #x01
   ; If bit 16 is set, we have BGEZ, else BLTZ. Test either way.
   (when (if (ldb-test (byte 1 16) (instruction-word instruction))
-          (>= (aref (cpu-registers cpu) source-register) 0)
-          (< (aref (cpu-registers cpu) source-register) 0))
+          (>= (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0)
+          (< (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0))
     ; Bit 20 indicates that we either have BGEZAL or BLTZAL
     (when (ldb-test (byte 1 20) (instruction-word instruction))
       (set-register cpu 31 (cpu-next-program-counter cpu)))
@@ -34,11 +34,11 @@
     (branch cpu (sign-extend immediate))))
 
 (def-i-type blez #x06
-  (when (<= (aref (cpu-registers cpu) source-register) 0)
+  (when (<= (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0)
     (branch cpu (sign-extend immediate))))
 
 (def-i-type bgtz #x07
-  (when (> (aref (cpu-registers cpu) source-register) 0)
+  (when (> (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0)
     (branch cpu (sign-extend immediate))))
 
 
