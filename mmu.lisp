@@ -32,14 +32,17 @@
 (defconstant kseg0-base #x80000000)
 (defconstant kseg1-base #xA0000000)
 (defconstant ram-begin #x00000000)
-(defconstant ram-size #x200000)
+(defconstant ram-size (* 4 #x200000))
 (defconstant bios-begin-address #x1FC00000)
 (defconstant memory-control-begin #x1F801000)
 (defconstant memory-control-size 36)
 (defconstant expansion-1-begin #x1F000000)
+(defconstant expansion-1-size #x80000)
 (defconstant expansion-2-begin #x1F802000)
 (defconstant expansion-2-size 66)
 (defconstant ram-size-begin #x1F801060)
+(defconstant irq-registers-begin #x1F801070)
+(defconstant irq-registers-size 8)
 (defconstant cache-control #xFFFE0130)
 (defconstant spu-registers-begin #x1F801C00)
 (defconstant spu-registers-size 640)
@@ -99,11 +102,24 @@
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8))
                 load-byte*))
 (defun load-byte* (psx address)
-  (declare (ignore psx))
   ; TODO(Samantha): Implement more places, simplify the cond.
-  (cond
-    ; Unimplemented.
-    (t (error "Byte reads to 0x~8,'0X are unimplemented~%" address))))
+  (let ((address (mask-address address)))
+    (cond
+      ((in-range bios-begin-address
+                 (array-dimension (psx-bios-rom psx) 0)
+                 address)
+       ; We only care about the top byte.
+       (aref (psx-bios-rom psx) (- address bios-begin-address)))
+      ((in-range ram-begin ram-size address)
+       ; We only care about the top byte.
+       (aref (psx-ram psx) (mod address #x200000)))
+      ((in-range expansion-1-begin
+                 expansion-1-size
+                 address)
+       ; We don't care about the expansion port just yet, return a dummy value.
+       #xFF)
+      ; Unimplemented.
+      (t (error "Byte reads to 0x~8,'0X are unimplemented~%" address)))))
 
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 16))
                 load-half-word*))
@@ -128,7 +144,7 @@
         (psx-bios-rom psx) (- address bios-begin-address)))
       ; RAM
       ((in-range ram-begin ram-size address)
-       (read-word-from-byte-array (psx-ram psx) (- address ram-begin)))
+       (read-word-from-byte-array (psx-ram psx) (mod address #x200000)))
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -137,12 +153,15 @@
  (ftype (function (psx (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
         write-byte*))
 (defun write-byte* (psx address value)
-  (declare (ignore psx))
   (let ((address (mask-address address)))
     (cond
       ((in-range expansion-2-begin expansion-2-size address)
        (format t "Wrote 0x~8,'0x to expansion2 @ 0x~8,'0x!~%" value address)
        value)
+      ((in-range ram-begin ram-size address)
+       (setf
+        (aref (psx-ram psx) (mod address #x200000))
+        value))
       ; Unimplemented.
       (t (error "Byte writes to 0x~8,'0X are unimplemented!~%" address)))))
 
@@ -198,6 +217,9 @@
           (format t "Wrote 0x~8,'0x to common delay!~%" value)
           value)
          (t (error "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address))))
+      ((in-range irq-registers-begin irq-registers-size address)
+       (format t "Wrote 0x~8,'0x to irq registers at 0x~8,'0x~%" value address)
+       value)
       ((= address ram-size-begin)
        (format t "Wrote 0x~8,'0x to ram size!~%" value)
        value)
@@ -206,8 +228,8 @@
        value)
       ; RAM
       ((in-range ram-begin ram-size address)
-       (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
-       (write-word-to-byte-array (psx-ram psx) (- address ram-begin) value))
+       ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
+       (write-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
       ; Unimplemented.
       (t (error "Word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
