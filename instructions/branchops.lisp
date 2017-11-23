@@ -8,7 +8,7 @@
           (< (aref (cpu-registers cpu) source-register) 0))
     ; Bit 20 indicates that we either have BGEZAL or BLTZAL
     (when (ldb-test (byte 1 20) (instruction-word instruction))
-      (set-register cpu 31 (cpu-program-counter cpu)))
+      (set-register cpu 31 (cpu-next-program-counter cpu)))
     (branch cpu (sign-extend immediate))))
 
 (def-j-type jmp #x02
