@@ -5,22 +5,20 @@
   (ldb-test (byte 1 16) (cop0:cop0-status-register (cpu-cop0 cpu))))
 
 (def-i-type lui #x0F
-  (setf
-   (aref (cpu-registers cpu) target-register)
-   (ash immediate 16)))
+  (set-register cpu target-register (ash immediate 16)))
 
 ; TODO(Samantha): Consider making a macro for cache sensitivity.
 (def-i-type lb #x20
-  (when (not (is-cache-isolated cpu))
-    (set-register
-     cpu target-register
-     (sign-extend-byte
-      (read-cpu-byte
-       cpu
-       (wrap-word
-        (+
-         (sign-extend immediate)
-         (aref (cpu-registers cpu) source-register))))))))
+  (setf (cpu-pending-load-register cpu) target-register)
+  (setf
+   (cpu-pending-load-value cpu)
+   (sign-extend-byte
+    (read-cpu-byte
+     cpu
+     (wrap-word
+      (+
+       (sign-extend immediate)
+       (aref (cpu-registers cpu) source-register)))))))
 
 (def-i-type lh #x21
   (let ((address
@@ -30,12 +28,15 @@
            (aref (cpu-registers cpu) source-register)))))
     (if (/= 0 (mod address 2))
       (trigger-exception cpu :cause :address-load-error)
-      (when (not (is-cache-isolated cpu))
-        (set-register
-         cpu target-register
-         (sign-extend (read-cpu-half-word cpu address)))))))
+      (progn
+       (setf (cpu-pending-load-register cpu) target-register)
+       (setf
+        (cpu-pending-load-value cpu)
+        (sign-extend (read-cpu-half-word cpu address)))))))
 
 ; TODO(Samantha): Shouldn't this and lwr be cache conscious?
+; LWL and LWR are both meant to be executed in sequence, it wouldn't make sense
+; for them to have a load delay.
 (def-i-type lwl #x22
   (let* ((address
           (wrap-word
@@ -69,21 +70,21 @@
            (aref (cpu-registers cpu) source-register)))))
     (if (/= 0 (mod address 4))
       (trigger-exception cpu :cause :address-load-error)
-      (when (not (is-cache-isolated cpu))
-        (set-register
-         cpu target-register
-         (read-cpu-word cpu address))))))
+      (progn
+       (setf (cpu-pending-load-register cpu) target-register)
+       (setf
+        (cpu-pending-load-value cpu)
+        (read-cpu-word cpu address))))))
 
 (def-i-type lbu #x24
-  (when (not (is-cache-isolated cpu))
-    (set-register
-     cpu target-register
-     (read-cpu-byte
-      cpu
-      (wrap-word
-       (+
-        (sign-extend immediate)
-        (aref (cpu-registers cpu) source-register)))))))
+  (setf (cpu-pending-load-register cpu) target-register)
+  (setf (cpu-pending-load-value cpu)
+        (read-cpu-byte
+         cpu
+         (wrap-word
+          (+
+           (sign-extend immediate)
+           (aref (cpu-registers cpu) source-register))))))
 
 (def-i-type lhu #x25
   (let ((address
@@ -93,10 +94,11 @@
            (aref (cpu-registers cpu) source-register)))))
     (if (/= 0 (mod address 2))
       (trigger-exception cpu :cause :load-address-error)
-      (when (not (is-cache-isolated cpu))
-        (set-register
-         cpu target-register
-         (read-cpu-half-word cpu address))))))
+      (progn
+       (setf (cpu-pending-load-register cpu) target-register)
+       (setf
+        (cpu-pending-load-value cpu)
+        (read-cpu-half-word cpu address))))))
 
 (def-i-type lwr #x26
   (let* ((address
@@ -242,14 +244,16 @@
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.
 (def-r-type mfc0 #xC0000
-  (set-register cpu target-register
-                (case destination-register
-                  (12 (cop0:cop0-status-register (cpu-cop0 cpu)))
-                  (13 (cop0:cop0-cause-register (cpu-cop0 cpu)))
-                  (14 (cop0:cop0-epc-register (cpu-cop0 cpu)))
-                  (otherwise
-                   (error "Unknown read to cop0$~d~%" destination-register)
-                   0))))
+  (setf (cpu-pending-load-register cpu) target-register)
+  (setf
+   (cpu-pending-load-value cpu)
+   (case destination-register
+     (12 (cop0:cop0-status-register (cpu-cop0 cpu)))
+     (13 (cop0:cop0-cause-register (cpu-cop0 cpu)))
+     (14 (cop0:cop0-epc-register (cpu-cop0 cpu)))
+     (otherwise
+      (error "Unknown read to cop0$~d~%" destination-register)
+      0))))
 
 (def-r-type mtc0 #xC0004
   (case destination-register

@@ -57,6 +57,11 @@
   (registers
    (make-array 32 :element-type '(unsigned-byte 32))
    :type (simple-array (unsigned-byte 32) (32)))
+  (pending-load-register 0 :type (unsigned-byte 5))
+  (pending-load-value 0 :type (unsigned-byte 32))
+  (delay-registers
+   (make-array 32 :element-type '(unsigned-byte 32))
+   :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
   (cop0 (cop0:make-cop0) :type cop0:cop0)
@@ -126,8 +131,8 @@
          (cpu (unsigned-byte 5) (unsigned-byte 32)) (unsigned-byte 32))
         set-register))
 (defun set-register (cpu index value)
-  (setf (aref (cpu-registers cpu) index) value)
-  (setf (aref (cpu-registers cpu) 0) 0))
+  (setf (aref (cpu-delay-registers cpu) index) value)
+  (setf (aref (cpu-delay-registers cpu) 0) 0))
 
 (declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
                 sign-extend))
@@ -300,10 +305,15 @@
   "Executes a single instruction and returns the number of cycles that this
    took."
   ; TODO(Samantha): Implement.
+  (set-register cpu (cpu-pending-load-register cpu) (cpu-pending-load-value cpu))
+  (setf (cpu-pending-load-register cpu) 0)
+  (setf (cpu-pending-load-value cpu) 0)
   (format t "~A~%" (instruction-information instruction))
   (if (/= 0 (mod (cpu-current-program-counter cpu) 4))
     (trigger-exception cpu :cause :address-load-error)
     (funcall (instruction-operation instruction) cpu instruction))
+  ; Move the registers from the delay slots into the regular ones.
+  (setf (cpu-registers cpu) (copy-seq (cpu-delay-registers cpu)))
   0)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
