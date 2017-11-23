@@ -20,7 +20,7 @@
 ; TODO(Samantha): This doesn't use jump-target, should it just be
 ; def-instruction?
 (def-j-type jal #x03
-  (set-register cpu 31 (cpu-program-counter cpu))
+  (set-register cpu 31 (cpu-next-program-counter cpu))
   (jmp cpu instruction))
 
 (def-i-type beq #x04
@@ -44,11 +44,11 @@
 
 (def-i-type jr #xFF08
   (setf
-   (cpu-program-counter cpu)
+   (cpu-next-program-counter cpu)
    (aref (cpu-registers cpu) source-register)))
 
 (def-r-type jalr #xFF09
-  (set-register cpu destination-register (cpu-program-counter cpu))
+  (set-register cpu destination-register (cpu-next-program-counter cpu))
   (jr cpu instruction))
 
 (def-i-type syscall #xFF0C

@@ -68,12 +68,13 @@
      (to-signed-byte-32 (aref (cpu-registers cpu) target-register))
      (* -1 shift-amount)))))
 
-; TODO(Samantha): Find out a way to quash the warning about signed conversion
-; that SBCL generates for this and SLL.
 (def-r-type sllv #xFF04
   (set-register
    cpu destination-register
    (wrap-word
+    ; TODO(Samantha): SBCL _really_ doesn't like this being sent out to
+    ; wrap-word as a potentially 63 bit signed integer. Even just doing the
+    ; logand manually quashes a warning. Ditto for SLL.
     (ash
      (aref (cpu-registers cpu) target-register)
      ; Shift from variable is masked by #x1F, or the lowest 5 bits.
