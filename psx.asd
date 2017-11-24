@@ -2,9 +2,10 @@
 
 (defsystem #:psx
   :components (
+               (:file "memory-constants")
                (:file "cop0")
-               (:file "cpu" :depends-on ("cop0"))
-               (:file "console" :depends-on ("cpu"))
+               (:file "cpu" :depends-on ("cop0" "memory-constants"))
+               (:file "console" :depends-on ("cpu" "memory-constants"))
                (:file "mmu" :depends-on ("console"))
                (:file "instructions/instruction-macros" :depends-on ("cpu"))
                (:file "instructions/arithmeticops" :depends-on ("cpu"))

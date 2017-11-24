@@ -1,7 +1,7 @@
 (defpackage #:psx-cpu
   (:nicknames #:cpu)
   ; TODO(Samantha): Should I be using :psx-coprocessor0 as well?
-  (:use :cl)
+  (:use :cl :memory)
   (:export #:cpu #:make-cpu
            #:cpu-memory-get-byte #:cpu-memory-set-byte
            #:cpu-memory-get-half-word #:cpu-memory-set-half-word
@@ -10,7 +10,6 @@
 
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
-(defconstant bios-begin-address-kseg1 #xBFC00000)
 
 (defvar instructions (make-hash-table :test 'equal))
 
@@ -89,21 +88,18 @@
 (defun power-on (cpu)
   "Sets the cpu to the initial power up state."
   ; TODO(Samantha): Fully implement.
-  (setf (cpu-program-counter cpu) bios-begin-address-kseg1)
+  (setf (cpu-program-counter cpu) bios-begin-address)
   (setf
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) 4))))
 
-; TODO(Samantha): Move the following constants and two functions out to a
-; separate file so that we don't have multiple copies in the codebase.
-(defconstant mirror-size #x20000000)
-(defconstant kuseg-base #x00000000)
-(defconstant kseg0-base #x80000000)
-(defconstant kseg1-base #xA0000000)
+; TODO(Samantha): The following two functions also appear in mmu, consider
+; moving out to memory constants and subsequently renaming to memory helpers.
 (declaim (ftype (function ((unsigned-byte 32)
                            (unsigned-byte 32)
                            (unsigned-byte 32))
-                          boolean) in-range))
+                          boolean)
+                in-range))
 (defun in-range (base size place)
   (and (>= place base) (< place (+ base size))))
 
@@ -304,11 +300,10 @@
 (defun execute (cpu instruction)
   "Executes a single instruction and returns the number of cycles that this
    took."
-  ; TODO(Samantha): Implement.
   (set-register cpu (cpu-pending-load-register cpu) (cpu-pending-load-value cpu))
   (setf (cpu-pending-load-register cpu) 0)
   (setf (cpu-pending-load-value cpu) 0)
-  (format t "~A~%" (instruction-information instruction))
+  ; (format t "~A~%" (instruction-information instruction))
   (if (/= 0 (mod (cpu-current-program-counter cpu) 4))
     (trigger-exception cpu :cause :address-load-error)
     (funcall (instruction-operation instruction) cpu instruction))

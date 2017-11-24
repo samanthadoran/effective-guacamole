@@ -1,6 +1,6 @@
 (defpackage #:psx-console
   (:nicknames #:psx)
-  (:use :cl :psx-cpu)
+  (:use :cl :psx-cpu :memory)
   (:export #:make-psx #:load-rom-from-file #:console-on #:make-console))
 
 (in-package :psx-console)
@@ -8,7 +8,7 @@
 
 (defstruct psx
   "A model psx"
-  (cpu (psx-cpu:make-cpu) :type psx-cpu:cpu)
+  (cpu (make-cpu) :type cpu)
   (bios-rom
    (make-array #x80000 :element-type '(unsigned-byte 8) :initial-element 0)
    :type (simple-array (unsigned-byte 8) (#x80000)))

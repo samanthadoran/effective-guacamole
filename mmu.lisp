@@ -27,26 +27,6 @@
     ; Otherwise, we're in kuseg
     (t address)))
 
-(defconstant mirror-size #x20000000)
-(defconstant kuseg-base #x00000000)
-(defconstant kseg0-base #x80000000)
-(defconstant kseg1-base #xA0000000)
-(defconstant ram-begin #x00000000)
-(defconstant ram-size (* 4 #x200000))
-(defconstant bios-begin-address #x1FC00000)
-(defconstant memory-control-begin #x1F801000)
-(defconstant memory-control-size 36)
-(defconstant expansion-1-begin #x1F000000)
-(defconstant expansion-1-size #x80000)
-(defconstant expansion-2-begin #x1F802000)
-(defconstant expansion-2-size 66)
-(defconstant ram-size-begin #x1F801060)
-(defconstant irq-registers-begin #x1F801070)
-(defconstant irq-registers-size 8)
-(defconstant cache-control #xFFFE0130)
-(defconstant spu-registers-begin #x1F801C00)
-(defconstant spu-registers-size 640)
-
 (declaim (ftype (function ((unsigned-byte 32)
                            (unsigned-byte 32)
                            (unsigned-byte 32))
@@ -86,6 +66,20 @@
    (ldb (byte 8 24) word))
   word)
 
+(declaim (ftype (function ((simple-array (unsigned-byte 8))
+                           (unsigned-byte 32)
+                           (unsigned-byte 16))
+                          (unsigned-byte 16))
+                write-half-word-to-byte-array))
+(defun write-half-word-to-byte-array (array offset half-word)
+  (setf
+   (aref array offset)
+   (ldb (byte 8 0) half-word))
+  (setf
+   (aref array (+ 1 offset))
+   (ldb (byte 8 8) half-word))
+  half-word)
+
 ; TODO(Samantha): Consider regions in these functions.
 (declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
                           (unsigned-byte 32))
@@ -108,10 +102,8 @@
       ((in-range bios-begin-address
                  (array-dimension (psx-bios-rom psx) 0)
                  address)
-       ; We only care about the top byte.
        (aref (psx-bios-rom psx) (- address bios-begin-address)))
       ((in-range ram-begin ram-size address)
-       ; We only care about the top byte.
        (aref (psx-ram psx) (mod address #x200000)))
       ((in-range expansion-1-begin
                  expansion-1-size
@@ -145,6 +137,9 @@
       ; RAM
       ((in-range ram-begin ram-size address)
        (read-word-from-byte-array (psx-ram psx) (mod address #x200000)))
+      ((in-range irq-registers-begin irq-registers-size address)
+       (format t "Read from 0x~8,'0x in irq registers~%"address)
+       0)
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -169,12 +164,17 @@
  (ftype (function (psx (unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16))
         write-half-word*))
 (defun write-half-word* (psx address value)
-  (declare (ignore psx))
   (let ((address (mask-address address)))
     (cond
       ((in-range spu-registers-begin spu-registers-size address)
        (format t "Wrote 0x~8,'0x to spu @ 0x~8,'0x!~%" value address)
        value)
+      ((in-range timers-begin timers-size address)
+       (format t "Wrote 0x~8,'0x to timers @ 0x~8,'0x!~%" value address)
+       value)
+      ((in-range ram-begin ram-size address)
+       ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
+       (write-half-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
       ; Unimplemented.
       (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
