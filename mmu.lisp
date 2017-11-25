@@ -93,6 +93,14 @@
    (ash (aref array (+ 2 offset)) 16)
    (ash (aref array (+ 3 offset)) 24)))
 
+(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
+                          (unsigned-byte 16))
+                read-half-word-from-byte-array))
+(defun read-half-word-from-byte-array (array offset)
+  (logior
+   (aref array offset)
+   (ash (aref array (+ 1 offset)) 8)))
+
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8))
                 load-byte*))
 (defun load-byte* (psx address)
@@ -116,11 +124,16 @@
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 16))
                 load-half-word*))
 (defun load-half-word* (psx address)
-  (declare (ignore psx))
   ; TODO(Samantha): Implement more places, simplify the cond.
-  (cond
-    ; Unimplemented.
-    (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address))))
+  (let ((address (mask-address address)))
+    (cond
+      ((in-range spu-registers-begin spu-registers-size address)
+       (format t "Read from 0x~8,'0x in spu registers~%" address)
+       0)
+      ((in-range ram-begin ram-size address)
+       (read-half-word-from-byte-array (psx-ram psx) (mod address #x200000)))
+      ; Unimplemented.
+      (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address)))))
 
 (declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 32))
                 load-word*))
@@ -139,6 +152,9 @@
        (read-word-from-byte-array (psx-ram psx) (mod address #x200000)))
       ((in-range irq-registers-begin irq-registers-size address)
        (format t "Read from 0x~8,'0x in irq registers~%"address)
+       0)
+      ((in-range dma-registers-begin dma-registers-size address)
+       (format t "Read from 0x~8,'0x in dma registers~%" address)
        0)
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%" address)))))
@@ -230,6 +246,10 @@
       ((in-range ram-begin ram-size address)
        ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
        (write-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
+      ((in-range dma-registers-begin dma-registers-size address)
+       ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
+       (format t "Wrote 0x~8,'0x to dma-registers at 0x~8,'0x~%" value address)
+       value)
       ; Unimplemented.
       (t (error "Word writes to 0x~8,'0X are unimplemented!~%" address)))))
 

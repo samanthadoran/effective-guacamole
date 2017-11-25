@@ -7,7 +7,7 @@
            #:expansion-2-begin #:expansion-2-size #:ram-size-begin
            #:irq-registers-begin #:irq-registers-size #:cache-control
            #:spu-registers-begin #:spu-registers-size #:timers-begin
-           #:timers-size))
+           #:timers-size #:dma-registers-begin #:dma-registers-size))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
@@ -36,3 +36,5 @@
 ; each of the four timers? Weird.
 (defconstant timers-begin #x1F801100)
 (defconstant timers-size #x30)
+(defconstant dma-registers-begin #x1F801080)
+(defconstant dma-registers-size #x80)
