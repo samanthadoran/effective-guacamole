@@ -4,7 +4,7 @@
   (:nicknames #:memory)
   (:use :cl)
   (:export #:mask-address #:determine-segment #:in-range
-           #:mirror-size #:kuseg-base #:kseg0-base #:kseg1-base
+           #:kuseg-base #:kseg0-base #:kseg1-base
            #:ram-begin #:ram-size #:bios-begin-address #:memory-control-begin
            #:memory-control-size #:expansion-1-begin #:expansion-1-size
            #:expansion-2-begin #:expansion-2-size #:ram-size-begin
@@ -17,8 +17,6 @@
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
 
-; TODO(Samantha): This mirror size is just wrong.
-(defconstant mirror-size #x20000000)
 (defconstant kuseg-base #x00000000)
 (defconstant kseg0-base #x80000000)
 (defconstant kseg1-base #xA0000000)
