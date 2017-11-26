@@ -2,50 +2,6 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
-(declaim (ftype (function ((unsigned-byte 32))
-                          (unsigned-byte 32))
-                mask-address))
-(defun mask-address (address)
-  "While the PSX has segments of memory, there is no proper virtual memory and
-   we only really care about the segment if it's out of a cached region.
-   Performs a bit mask of the address so we can access items in mirrored areas
-   without too much hassle."
-  ; TODO(Samantha): This could certainly be done with a lookup table, but I'm
-  ; not certain it would be clearer.
-  (cond
-    ; If bits [31:29] are greater than 6, we're in kseg2. The only things here
-    ; are some io registers and other miscelanneous things, no need to mask off
-    ; bits.
-    ((>= (ldb (byte 3 29) address) 6)
-     address)
-    ; If bits [31:29] are equal to 5, we're in kseg1
-    ((= (ldb (byte 3 29) address) 5)
-     (ldb (byte 29 0) address))
-    ; If bits [31:29] are equal to 4, we're in kseg0
-    ((= (ldb (byte 3 29) address) 4)
-     (ldb (byte 31 0) address))
-    ; Otherwise, we're in kuseg
-    (t address)))
-
-(declaim (ftype (function ((unsigned-byte 32)
-                           (unsigned-byte 32)
-                           (unsigned-byte 32))
-                          boolean) in-range))
-(defun in-range (base size place)
-  (and (>= place base) (< place (+ base size))))
-
-; TODO(Samantha): I think these mirror sizes are wrong, also we are blatantly
-; ignoring KSEG2.
-(declaim (ftype (function ((unsigned-byte 32))
-                          keyword)
-                determine-segment))
-(defun determine-segment (address)
-  (cond
-    ((in-range kuseg-base mirror-size address) :kuseg)
-    ((in-range kseg0-base mirror-size address) :kseg0)
-    ((in-range kseg1-base mirror-size address) :kseg1)
-    (t :invalid-segment)))
-
 (declaim (ftype (function ((simple-array (unsigned-byte 8))
                            (unsigned-byte 32)
                            (unsigned-byte 32))

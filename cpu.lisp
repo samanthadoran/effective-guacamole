@@ -88,28 +88,10 @@
 (defun power-on (cpu)
   "Sets the cpu to the initial power up state."
   ; TODO(Samantha): Fully implement.
-  (setf (cpu-program-counter cpu) bios-begin-address)
+  (setf (cpu-program-counter cpu) bios-begin-unmasked-address)
   (setf
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) 4))))
-
-; TODO(Samantha): The following two functions also appear in mmu, consider
-; moving out to memory constants and subsequently renaming to memory helpers.
-(declaim (ftype (function ((unsigned-byte 32)
-                           (unsigned-byte 32)
-                           (unsigned-byte 32))
-                          boolean)
-                in-range))
-(defun in-range (base size place)
-  (and (>= place base) (< place (+ base size))))
-
-(declaim (ftype (function ((unsigned-byte 32)) keyword) determine-segment))
-(defun determine-segment (address)
-  (cond
-    ((in-range kuseg-base mirror-size address) :kuseg)
-    ((in-range kseg0-base mirror-size address) :kseg0)
-    ((in-range kseg1-base mirror-size address) :kseg1)
-    (t :invalid-segment)))
 
 (declaim (ftype (function (instruction) string) instruction-information))
 (defun instruction-information (instruction)
@@ -303,7 +285,7 @@
   (set-register cpu (cpu-pending-load-register cpu) (cpu-pending-load-value cpu))
   (setf (cpu-pending-load-register cpu) 0)
   (setf (cpu-pending-load-value cpu) 0)
-  ; (format t "~A~%" (instruction-information instruction))
+  (format t "~A~%" (instruction-information instruction))
   (if (/= 0 (mod (cpu-current-program-counter cpu) 4))
     (trigger-exception cpu :cause :address-load-error)
     (funcall (instruction-operation instruction) cpu instruction))
