@@ -132,6 +132,9 @@
        0)
       ((in-range ram-begin ram-size address)
        (read-half-word-from-byte-array (psx-ram psx) (mod address #x200000)))
+       ((in-range irq-registers-begin irq-registers-size address)
+        (format t "Read from 0x~8,'0x in irq registers~%" address)
+        0)
       ; Unimplemented.
       (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -156,6 +159,14 @@
       ((in-range dma-registers-begin dma-registers-size address)
        (format t "Read from 0x~8,'0x in dma registers~%" address)
        0)
+      ((in-range gpu-registers-begin gpu-registers-size address)
+       (format t "Read from 0x~8,'0x in gpu registers~%" address)
+       (cond
+         ; GPUSTAT. Set bit 28 to indicate it's ready for dma until proper
+         ; implementation.
+         ((= 4 (- address gpu-registers-begin))
+          #x10000000)
+         (t 0)))
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -189,8 +200,10 @@
        (format t "Wrote 0x~8,'0x to timers @ 0x~8,'0x!~%" value address)
        value)
       ((in-range ram-begin ram-size address)
-       ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
        (write-half-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
+      ((in-range irq-registers-begin irq-registers-size address)
+       (format t "Wrote 0x~8,'0x to irq registers @ 0x~8,'0x!~%" value address)
+       value)
       ; Unimplemented.
       (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
@@ -241,6 +254,12 @@
        value)
       ((= address cache-control)
        (format t "Wrote 0x~8,'0x to cache control!~%" value)
+       value)
+      ((in-range gpu-registers-begin gpu-registers-size address)
+       (format t "Wrote 0x~8,'0x to gpu registers at 0x~8,'0x~%" value address)
+       value)
+      ((in-range timers-begin timers-size address)
+       (format t "Wrote 0x~8,'0x to timers at 0x~8,'0x~%" value address)
        value)
       ; RAM
       ((in-range ram-begin ram-size address)

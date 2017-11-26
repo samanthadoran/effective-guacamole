@@ -7,7 +7,8 @@
            #:expansion-2-begin #:expansion-2-size #:ram-size-begin
            #:irq-registers-begin #:irq-registers-size #:cache-control
            #:spu-registers-begin #:spu-registers-size #:timers-begin
-           #:timers-size #:dma-registers-begin #:dma-registers-size))
+           #:timers-size #:dma-registers-begin #:dma-registers-size
+           #:gpu-registers-begin #:gpu-registers-size))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
@@ -38,3 +39,7 @@
 (defconstant timers-size #x30)
 (defconstant dma-registers-begin #x1F801080)
 (defconstant dma-registers-size #x80)
+; TODO(Samantha): Maybe split these into two ranges, one for the readables, one
+; for the writables?
+(defconstant gpu-registers-begin #x1F801810)
+(defconstant gpu-registers-size 8)
