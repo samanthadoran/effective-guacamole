@@ -9,6 +9,7 @@
 (defstruct psx
   "A model psx"
   (cpu (make-cpu) :type cpu)
+  (gpu (psx-gpu:make-gpu) :type psx-gpu:gpu)
   (bios-rom
    (make-array #x80000 :element-type '(unsigned-byte 8) :initial-element 0)
    :type (simple-array (unsigned-byte 8) (#x80000)))

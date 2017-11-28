@@ -1,0 +1,71 @@
+(defpackage #:psx-gpu
+  (:nicknames #:gpu)
+  (:use :cl)
+  (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word))
+
+(in-package :psx-gpu)
+(declaim (optimize (speed 3) (safety 1)))
+
+; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
+(defstruct gpu-stat
+  (texture-page-x-base 0 :type (unsigned-byte 4))
+  (texture-page-y-base 0 :type (unsigned-byte 1))
+  (semi-transparency 0 :type (unsigned-byte 2))
+  (texture-page-colors 0 :type (unsigned-byte 2))
+  (dither-24-to-15-bit 0 :type (unsigned-byte 1))
+  (draw-to-display-area 0 :type (unsigned-byte 1))
+  (set-mask-bit 0 :type (unsigned-byte 1))
+  (draw-pixels 0 :type (unsigned-byte 1))
+  (interlace-field 0 :type (unsigned-byte 1))
+  ; According to nocash, this bit just causes strange effects on the
+  ; display on real hardware; ignore?
+  (reverse-flag 0 :type (unsigned-byte 1))
+  (texture-disable 0 :type (unsigned-byte 1))
+  (horizontal-resolution-2 0 :type (unsigned-byte 1))
+  (horizontal-resolution-1 0 :type (unsigned-byte 2))
+  (vertical-resolution 0 :type (unsigned-byte 1))
+  (video-mode 0 :type (unsigned-byte 1))
+  (display-area-color-depth 0 :type (unsigned-byte 1))
+  (vertical-interlace 0 :type (unsigned-byte 1))
+  (display-disabled 0 :type (unsigned-byte 1))
+  (irq1 0 :type (unsigned-byte 1))
+  (dma 0 :type (unsigned-byte 1))
+  (ready-to-receive-command 0 :type (unsigned-byte 1))
+  (ready-to-send-vram-to-cpu 0 :type (unsigned-byte 1))
+  ; Set to avoid a hang in the bios
+  (ready-to-receive-dma-block 1 :type (unsigned-byte 1))
+  (dma-direction 0 :type (unsigned-byte 2))
+  (even-odd-line 0 :type (unsigned-byte 1)))
+
+(declaim (ftype (function (gpu-stat) (unsigned-byte 32)) gpu-stat-to-word))
+(defun gpu-stat-to-word (gpu-stat)
+  (logior
+   (gpu-stat-texture-page-x-base gpu-stat)
+   (ash (gpu-stat-texture-page-y-base gpu-stat) 4)
+   (ash (gpu-stat-semi-transparency gpu-stat) 5)
+   (ash (gpu-stat-texture-page-colors gpu-stat) 7)
+   (ash (gpu-stat-dither-24-to-15-bit gpu-stat) 9)
+   (ash (gpu-stat-draw-to-display-area gpu-stat) 10)
+   (ash (gpu-stat-set-mask-bit gpu-stat) 11)
+   (ash (gpu-stat-draw-pixels gpu-stat) 12)
+   (ash (gpu-stat-interlace-field gpu-stat) 13)
+   (ash (gpu-stat-reverse-flag gpu-stat) 14)
+   (ash (gpu-stat-texture-disable gpu-stat) 15)
+   (ash (gpu-stat-horizontal-resolution-2 gpu-stat) 16)
+   (ash (gpu-stat-horizontal-resolution-1 gpu-stat) 17)
+   (ash (gpu-stat-vertical-resolution gpu-stat) 19)
+   (ash (gpu-stat-video-mode gpu-stat) 20)
+   (ash (gpu-stat-display-area-color-depth gpu-stat) 21)
+   (ash (gpu-stat-vertical-interlace gpu-stat) 22)
+   (ash (gpu-stat-display-disabled gpu-stat) 23)
+   (ash (gpu-stat-irq1 gpu-stat) 24)
+   (ash (gpu-stat-dma gpu-stat) 25)
+   (ash (gpu-stat-ready-to-receive-command gpu-stat) 26)
+   (ash (gpu-stat-ready-to-send-vram-to-cpu gpu-stat) 27)
+   (ash (gpu-stat-ready-to-receive-dma-block gpu-stat) 28)
+   (ash (gpu-stat-dma-direction gpu-stat) 29)
+   (ash (gpu-stat-even-odd-line gpu-stat) 31)))
+
+(defstruct gpu
+  "A model psx gpu"
+  (gpu-stat (make-gpu-stat) :type gpu-stat))

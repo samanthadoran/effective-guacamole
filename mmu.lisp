@@ -116,13 +116,12 @@
        (format t "Read from 0x~8,'0x in dma registers~%" address)
        0)
       ((in-range gpu-registers-begin gpu-registers-size address)
-       (format t "Read from 0x~8,'0x in gpu registers~%" address)
        (cond
-         ; GPUSTAT. Set bit 28 to indicate it's ready for dma until proper
-         ; implementation.
+         ; GPUSTAT
          ((= 4 (- address gpu-registers-begin))
-          #x10000000)
-         (t 0)))
+          (format t "Reading from GPUSTAT~%")
+          (psx-gpu:gpu-stat-to-word (psx-gpu:gpu-gpu-stat (psx-gpu psx))))
+         (t (format t "Read from 0x~8,'0x in gpu registers~%" address) 0)))
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%" address)))))
 

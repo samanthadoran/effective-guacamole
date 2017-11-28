@@ -24,7 +24,7 @@
 (defconstant ram-begin #x00000000)
 (defconstant ram-size (* 4 #x200000))
 
-; It owuld be nice to have a constant BIOS size here, but I'm not certain if all
+; It would be nice to have a constant BIOS size here, but I'm not certain if all
 ; psx BIOS are of the same size. An additional unmasked address is used for the
 ; power on value of the cpu program counter.
 (defconstant bios-begin-address #x1FC00000)
