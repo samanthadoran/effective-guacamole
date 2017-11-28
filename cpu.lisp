@@ -226,7 +226,7 @@
                  (cadr (gethash masked-opcode instructions))
                  (lambda (cpu instruction)
                          (declare (ignore instruction))
-                         (trigger-exception cpu :reserved-instruction)
+                         (trigger-exception cpu :cause :reserved-instruction)
                          (values)))
      :address (cpu-program-counter cpu)
      :masked-opcode masked-opcode
