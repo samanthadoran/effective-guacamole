@@ -273,6 +273,11 @@
            (:arithmetic-overflow #xC)
            (otherwise (error "Unimplemented cause ~A" cause)))
          2))
+  ; Only these two causes ever change the bad virtual address register.
+  (when (or (eq cause :address-write-error) (eq cause :address-load-error))
+    (setf
+     (cop0:cop0-bad-virtual-address-register (cpu-cop0 cpu))
+     (cpu-current-program-counter cpu)))
   ; TODO(Samantha): Understand this mess better.
   (setf
    (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
