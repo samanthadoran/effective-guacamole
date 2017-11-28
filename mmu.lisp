@@ -88,9 +88,9 @@
        0)
       ((in-range ram-begin ram-size address)
        (read-half-word-from-byte-array (psx-ram psx) (mod address #x200000)))
-       ((in-range irq-registers-begin irq-registers-size address)
-        (format t "Read from 0x~8,'0x in irq registers~%" address)
-        0)
+      ((in-range irq-registers-begin irq-registers-size address)
+       (format t "Read from 0x~8,'0x in irq registers~%" address)
+       0)
       ; Unimplemented.
       (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address)))))
 
