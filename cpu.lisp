@@ -112,42 +112,6 @@
   (setf (aref (cpu-delay-registers cpu) index) value)
   (setf (aref (cpu-delay-registers cpu) 0) 0))
 
-(declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
-                sign-extend))
-(defun sign-extend (to-be-extended)
-  (logior to-be-extended
-          (if (ldb-test (byte 1 15) to-be-extended)
-            ; Left fill 1s
-            #xFFFF0000
-            ; Left fill 0s
-            #x00000000)))
-
-(declaim (ftype (function ((unsigned-byte 8)) (unsigned-byte 32))
-                sign-extend-byte))
-(defun sign-extend-byte (to-be-extended)
-  (logior to-be-extended
-          (if (ldb-test (byte 1 7) to-be-extended)
-            ; Left fill 1s
-            #xFFFFFF00
-            ; Left fill 0s
-            #x00000000)))
-
-(declaim (ftype (function ((signed-byte 64)) (unsigned-byte 32))
-                wrap-word))
-(defun wrap-word (to-be-wrapped)
-  "Takes up to a 64 bit signed int and returns the truncated 32 bit
-   representation."
-  (ldb (byte 32 0) to-be-wrapped))
-
-(declaim (ftype (function ((unsigned-byte 32)) (signed-byte 32))
-                to-signed-byte-32))
-(defun to-signed-byte-32 (to-be-converted)
-  "Translates a psx unsigned word into a lisp signed int for easier arithmetic."
-  ; If the MSB is set, do the inversions.
-  (if (ldb-test (byte 1 31) to-be-converted)
-    (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot to-be-converted))))
-    to-be-converted))
-
 ; TODO(Samantha): These six functions should really be wrapped into the mmu.
 (declaim (ftype (function (cpu (unsigned-byte 32))
                           (unsigned-byte 8))

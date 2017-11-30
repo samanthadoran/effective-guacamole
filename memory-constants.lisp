@@ -11,7 +11,8 @@
            #:spu-registers-begin #:spu-registers-size #:timers-begin
            #:timers-size #:dma-registers-begin #:dma-registers-size
            #:gpu-registers-begin #:gpu-registers-size
-           #:bios-begin-unmasked-address))
+           #:bios-begin-unmasked-address #:sign-extend #:sign-extend-byte
+           #:wrap-word #:to-signed-byte-32))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
@@ -96,3 +97,39 @@
                           boolean) in-range))
 (defun in-range (base size place)
   (and (>= place base) (< place (+ base size))))
+
+(declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
+                sign-extend))
+(defun sign-extend (to-be-extended)
+  (logior to-be-extended
+          (if (ldb-test (byte 1 15) to-be-extended)
+            ; Left fill 1s
+            #xFFFF0000
+            ; Left fill 0s
+            #x00000000)))
+
+(declaim (ftype (function ((unsigned-byte 8)) (unsigned-byte 32))
+                sign-extend-byte))
+(defun sign-extend-byte (to-be-extended)
+  (logior to-be-extended
+          (if (ldb-test (byte 1 7) to-be-extended)
+            ; Left fill 1s
+            #xFFFFFF00
+            ; Left fill 0s
+            #x00000000)))
+
+(declaim (ftype (function ((signed-byte 64)) (unsigned-byte 32))
+                wrap-word))
+(defun wrap-word (to-be-wrapped)
+  "Takes up to a 64 bit signed int and returns the truncated 32 bit
+     representation."
+  (ldb (byte 32 0) to-be-wrapped))
+
+(declaim (ftype (function ((unsigned-byte 32)) (signed-byte 32))
+                to-signed-byte-32))
+(defun to-signed-byte-32 (to-be-converted)
+  "Translates a psx unsigned word into a lisp signed int for easier arithmetic."
+  ; If the MSB is set, do the inversions.
+  (if (ldb-test (byte 1 31) to-be-converted)
+    (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot to-be-converted))))
+    to-be-converted))
