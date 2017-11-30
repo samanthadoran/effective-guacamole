@@ -10,6 +10,8 @@
   "A model psx"
   (cpu (make-cpu) :type cpu)
   (gpu (psx-gpu:make-gpu) :type psx-gpu:gpu)
+  ; TODO(Samantha): I'm not convinced this is going to work out cleanly.
+  (dma (psx-dma:make-dma) :type psx-dma:dma)
   (bios-rom
    (make-array #x80000 :element-type '(unsigned-byte 8) :initial-element 0)
    :type (simple-array (unsigned-byte 8) (#x80000)))

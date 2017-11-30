@@ -114,7 +114,9 @@
        0)
       ((in-range dma-registers-begin dma-registers-size address)
        (format t "Read from 0x~8,'0x in dma registers~%" address)
-       0)
+       (if (= (- address dma-registers-begin) #x70)
+         (psx-dma:dma-control-register (psx-dma psx))
+         0))
       ((in-range gpu-registers-begin gpu-registers-size address)
        (cond
          ; GPUSTAT
@@ -221,9 +223,12 @@
        ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
        (write-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
       ((in-range dma-registers-begin dma-registers-size address)
-       ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
        (format t "Wrote 0x~8,'0x to dma-registers at 0x~8,'0x~%" value address)
-       value)
+       ; We only currently 'handle' writes to dma-control. Everything else
+       ; is just ignored.
+       (if (= (- address dma-registers-begin) #x70)
+         (setf (psx-dma:dma-control-register (psx-dma psx)) value)
+         value))
       ; Unimplemented.
       (t (error "Word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
