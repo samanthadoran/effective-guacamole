@@ -84,7 +84,7 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range spu-registers-begin spu-registers-size address)
-       (format t "Read from 0x~8,'0x in spu registers~%" address)
+       ; (format t "Read from 0x~8,'0x in spu registers~%" address)
        0)
       ((in-range ram-begin ram-size address)
        (read-half-word-from-byte-array (psx-ram psx) (mod address #x200000)))
@@ -113,10 +113,7 @@
        (format t "Read from 0x~8,'0x in irq registers~%"address)
        0)
       ((in-range dma-registers-begin dma-registers-size address)
-       (format t "Read from 0x~8,'0x in dma registers~%" address)
-       (if (= (- address dma-registers-begin) #x70)
-         (psx-dma:dma-control-register (psx-dma psx))
-         0))
+       (psx-dma:get-register (psx-dma psx) (mod address dma-registers-begin)))
       ((in-range gpu-registers-begin gpu-registers-size address)
        (cond
          ; GPUSTAT
@@ -151,7 +148,7 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range spu-registers-begin spu-registers-size address)
-       (format t "Wrote 0x~8,'0x to spu @ 0x~8,'0x!~%" value address)
+       ; (format t "Wrote 0x~8,'0x to spu @ 0x~8,'0x!~%" value address)
        value)
       ((in-range timers-begin timers-size address)
        (format t "Wrote 0x~8,'0x to timers @ 0x~8,'0x!~%" value address)
@@ -220,21 +217,21 @@
        value)
       ; RAM
       ((in-range ram-begin ram-size address)
-       ; (format t "Wrote 0x~8,'0x to ram(0x~8,'0X)!~%" value address)
        (write-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
       ((in-range dma-registers-begin dma-registers-size address)
-       (format t "Wrote 0x~8,'0x to dma-registers at 0x~8,'0x~%" value address)
-       ; We only currently 'handle' writes to dma-control. Everything else
-       ; is just ignored.
-       (if (= (- address dma-registers-begin) #x70)
-         (setf (psx-dma:dma-control-register (psx-dma psx)) value)
-         value))
+       (psx-dma:set-register (psx-dma psx) (mod address dma-registers-begin) value))
       ; Unimplemented.
       (t (error "Word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
 (declaim (ftype (function (psx) function) map-memory))
 (defun map-memory (psx)
   "Sets functions for easy reading and writing throughout the system."
+  ; TODO(Samantha): Somewhere in the following functions, we should give
+  ; the DMA references to the various components it's tranferring to. Or should
+  ; we just implement DMA transfer in here?
+  (setf
+   (psx-dma:dma-write (psx-dma psx))
+   (lambda (address value) (write-word* psx address value)))
   (setf
    (psx-cpu:cpu-memory-get-byte (psx-cpu psx))
    (lambda (address) (load-byte* psx address)))

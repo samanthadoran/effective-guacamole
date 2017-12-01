@@ -6,7 +6,7 @@
                (:file "cop0")
                (:file "cpu" :depends-on ("cop0" "memory-constants"))
                (:file "gpu")
-               (:file "dma")
+               (:file "dma" :depends-on ("memory-constants"))
                (:file "console" :depends-on ("cpu" "memory-constants" "gpu" "dma"))
                (:file "mmu" :depends-on ("console"))
                (:file "instructions/instruction-macros" :depends-on ("cpu"))

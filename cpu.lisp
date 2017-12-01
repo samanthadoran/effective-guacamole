@@ -13,6 +13,8 @@
 
 (defvar instructions (make-hash-table :test 'equal))
 
+(defparameter *debug-cpu* nil)
+
 (defstruct instruction
   "PSX instruction"
   (word 0 :type (unsigned-byte 32))
@@ -254,7 +256,8 @@
   (set-register cpu (cpu-pending-load-register cpu) (cpu-pending-load-value cpu))
   (setf (cpu-pending-load-register cpu) 0)
   (setf (cpu-pending-load-value cpu) 0)
-  (format t "~A~%" (instruction-information instruction))
+  (when *debug-cpu*
+    (format t "~A~%" (instruction-information instruction)))
   (if (/= 0 (mod (cpu-current-program-counter cpu) 4))
     (trigger-exception cpu :cause :address-load-error)
     (funcall (instruction-operation instruction) cpu instruction))
