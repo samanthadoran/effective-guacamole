@@ -112,6 +112,9 @@
       ((in-range irq-registers-begin irq-registers-size address)
        (format t "Read from 0x~8,'0x in irq registers~%"address)
        0)
+      ((in-range timers-begin timers-size address)
+       (format t "Read from 0x~8,'0x in timers~%"address)
+       0)
       ((in-range dma-registers-begin dma-registers-size address)
        (psx-dma:get-register (psx-dma psx) (mod address dma-registers-begin)))
       ((in-range gpu-registers-begin gpu-registers-size address)
@@ -226,9 +229,9 @@
 (declaim (ftype (function (psx) function) map-memory))
 (defun map-memory (psx)
   "Sets functions for easy reading and writing throughout the system."
-  ; TODO(Samantha): Somewhere in the following functions, we should give
-  ; the DMA references to the various components it's tranferring to. Or should
-  ; we just implement DMA transfer in here?
+  (setf
+   (psx-dma:dma-read (psx-dma psx))
+   (lambda (address) (load-word* psx address)))
   (setf
    (psx-dma:dma-write (psx-dma psx))
    (lambda (address value) (write-word* psx address value)))

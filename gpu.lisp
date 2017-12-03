@@ -30,9 +30,9 @@
   (display-disabled 0 :type (unsigned-byte 1))
   (irq1 0 :type (unsigned-byte 1))
   (dma 0 :type (unsigned-byte 1))
-  (ready-to-receive-command 0 :type (unsigned-byte 1))
-  (ready-to-send-vram-to-cpu 0 :type (unsigned-byte 1))
   ; Set to avoid a hang in the bios
+  (ready-to-receive-command 1 :type (unsigned-byte 1))
+  (ready-to-send-vram-to-cpu 1 :type (unsigned-byte 1))
   (ready-to-receive-dma-block 1 :type (unsigned-byte 1))
   (dma-direction 0 :type (unsigned-byte 2))
   (even-odd-line 0 :type (unsigned-byte 1)))

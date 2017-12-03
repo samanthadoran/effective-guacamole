@@ -2,7 +2,7 @@
   (:nicknames #:dma)
   (:use :cl :memory)
   (:export #:dma #:make-dma #:dma-control-register #:dma-interrupt-register
-           #:dma-channels #:get-register #:set-register #:dma-write))
+           #:dma-channels #:get-register #:set-register #:dma-write #:dma-read))
 
 (in-package :psx-dma)
 (declaim (optimize (speed 3) (safety 1)))
@@ -135,6 +135,9 @@
   (write
    (lambda (address value) (declare (ignore address)) value)
    :type (function ((unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32)))
+  (read
+   (lambda (address) (declare (ignore address)) 0)
+   :type (function ((unsigned-byte 32)) (unsigned-byte 32)))
   (control-register #x07654321 :type (unsigned-byte 32))
   (interrupt-register (make-interrupt-register) :type interrupt-register)
   (channels
@@ -199,7 +202,7 @@
   (case (channel-control-sync-mode (channel-channel-control channel))
     (:manual (run-dma-block dma channel))
     (:request (run-dma-block dma channel))
-    (:linked-list (error "Linked List DMA Sync is unimplemented!~%"))
+    (:linked-list (run-dma-linked-list dma channel))
     (otherwise (error "Reserved DMA sync-mode!~%")))
   (values))
 
@@ -213,18 +216,17 @@
 
 (declaim (ftype (function (dma channel)) run-dma-block))
 (defun run-dma-block (dma channel)
-  ; TODO(Samantha): Properly set this.
   (let ((remaining (transfer-size channel))
         (channel-control (channel-channel-control channel))
-        ; TODO(Samantha): Properly determine the channel. For now, just assume
-        ; channel six to clear an ordering table.
         (base (channel-base channel)))
-    (format t "Transfer size is 0x~8,'0x from base address 0x~8,'0x~%" remaining base)
     (loop for i from remaining downto 1 do
       (progn
-       ; TODO(Samantha): Write this to base & 0x1FFFFC
        (case (channel-control-direction channel-control)
-         (:from-ram (error "From-ram DMA direction is unimplemented!~%"))
+         (:from-ram
+          (case (channel-port channel)
+            (:gpu
+             (format t "GPU data: 0x~8,'0x~%" (funcall (dma-read dma) (logand base #x1FFFFC))))
+            (otherwise (error "Unhandled DMA channel ~A~%" (channel-port channel)))))
          (:to-ram
           (case (channel-port channel)
             (:otc
@@ -242,4 +244,25 @@
         base
         (wrap-word
          (+ base (channel-control-step channel-control)))))))
+  (complete channel))
+
+(declaim (ftype (function (dma channel)) run-dma-linked-list))
+(defun run-dma-linked-list (dma channel)
+  (let ((channel-control (channel-channel-control channel))
+        (base (logand #x1FFFFC (channel-base channel))))
+    (when (not (eql :gpu (channel-port channel)))
+      (error "Linked list dma not implemented for anything other than GPU!~%"))
+    (when (eql :to-ram (channel-control-direction channel-control))
+      (error "To ram dma linked list transfers are invalid!~%"))
+    (loop do
+      (let ((header (funcall (dma-read dma) base)))
+        (loop for i from (ldb (byte 8 24) header) downto 1 do
+          (progn
+           (setf base (logand #x1FFFFC (+ 4 base)))
+           (format t "GPU command word: 0x~8,'0x~%" (funcall (dma-read dma) base))))
+        ; TODO(Samantha): Some sources say that the psx only reads the high bit
+        ; to test for end of the list.
+        (when (or (ldb-test (byte 32 0) (logand header #x800000))(= #xFFFFFF (ldb (byte 24 0) header)))
+          (loop-finish))
+        (setf base (logand header #x1FFFFC)))))
   (complete channel))
