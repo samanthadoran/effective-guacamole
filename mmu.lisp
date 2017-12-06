@@ -118,12 +118,7 @@
       ((in-range dma-registers-begin dma-registers-size address)
        (psx-dma:get-register (psx-dma psx) (mod address dma-registers-begin)))
       ((in-range gpu-registers-begin gpu-registers-size address)
-       (cond
-         ; GPUSTAT
-         ((= 4 (- address gpu-registers-begin))
-          (format t "Reading from GPUSTAT~%")
-          (psx-gpu:gpu-stat-to-word (psx-gpu:gpu-gpu-stat (psx-gpu psx))))
-         (t (format t "Read from 0x~8,'0x in gpu registers~%" address) 0)))
+       (psx-gpu:read-gpu (psx-gpu psx) (mod address gpu-registers-begin)))
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -213,8 +208,7 @@
        (format t "Wrote 0x~8,'0x to cache control!~%" value)
        value)
       ((in-range gpu-registers-begin gpu-registers-size address)
-       (format t "Wrote 0x~8,'0x to gpu registers at 0x~8,'0x~%" value address)
-       value)
+       (psx-gpu::write-gpu (psx-gpu psx) (mod address gpu-registers-begin) value))
       ((in-range timers-begin timers-size address)
        (format t "Wrote 0x~8,'0x to timers at 0x~8,'0x~%" value address)
        value)

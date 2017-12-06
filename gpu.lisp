@@ -1,7 +1,8 @@
 (defpackage #:psx-gpu
   (:nicknames #:gpu)
   (:use :cl)
-  (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word))
+  (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
+           #:read-gpu #:write-gpu))
 
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 1)))
@@ -69,3 +70,41 @@
 (defstruct gpu
   "A model psx gpu"
   (gpu-stat (make-gpu-stat) :type gpu-stat))
+
+(declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
+(defun read-gpu-read (gpu)
+  (declare (ignore gpu))
+  (format t "Reading from gpu-read is unimplemented! Returning 0.~%")
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32)) write-gp0))
+(defun write-gp0 (gpu value)
+  (declare (ignore gpu))
+  (format t "Wrote: 0x~8,'0x to GP0~%" value)
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                write-gp1))
+(defun write-gp1 (gpu value)
+  (declare (ignore gpu))
+  (format t "Wrote: 0x~8,'0x to GP1~%" value)
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 4) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                write-gpu))
+(defun write-gpu (gpu offset value)
+  (case offset
+    (0 (write-gp0 gpu value))
+    (4 (write-gp1 gpu value))
+    (otherwise (error "Invalid GPU write offset 0x~8,'0x~%" offset))))
+
+(declaim (ftype (function (gpu (unsigned-byte 4))
+                          (unsigned-byte 32))
+                read-gpu))
+(defun read-gpu (gpu offset)
+  (case offset
+    (0 (read-gpu-read gpu))
+    (4 (gpu-stat-to-word (gpu-gpu-stat gpu)))
+    (otherwise (error "Invalid GPU read offset 0x~8,'0x~%" offset))))
