@@ -17,7 +17,7 @@
    :type (simple-array (unsigned-byte 8) (#x80000)))
   (ram
    (make-array #x200000 :element-type '(unsigned-byte 8) :initial-element 0)
-   :type (simple-array (unsigned-byte 8) (#x200000))))
+   :type (simple-array (unsigned-byte 8) (ram-size-non-mirrored))))
 
 (defun load-rom-from-file (filepath)
   (with-open-file (stream filepath :element-type '(unsigned-byte 8))

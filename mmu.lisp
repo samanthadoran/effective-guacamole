@@ -68,7 +68,7 @@
                  address)
        (aref (psx-bios-rom psx) (- address bios-begin-address)))
       ((in-range ram-begin ram-size address)
-       (aref (psx-ram psx) (mod address #x200000)))
+       (aref (psx-ram psx) (mod address ram-size-non-mirrored)))
       ((in-range expansion-1-begin
                  expansion-1-size
                  address)
@@ -87,7 +87,7 @@
        ; (format t "Read from 0x~8,'0x in spu registers~%" address)
        0)
       ((in-range ram-begin ram-size address)
-       (read-half-word-from-byte-array (psx-ram psx) (mod address #x200000)))
+       (read-half-word-from-byte-array (psx-ram psx) (mod address ram-size-non-mirrored)))
       ((in-range irq-registers-begin irq-registers-size address)
        (format t "Read from 0x~8,'0x in irq registers~%" address)
        0)
@@ -108,7 +108,7 @@
         (psx-bios-rom psx) (- address bios-begin-address)))
       ; RAM
       ((in-range ram-begin ram-size address)
-       (read-word-from-byte-array (psx-ram psx) (mod address #x200000)))
+       (read-word-from-byte-array (psx-ram psx) (mod address ram-size-non-mirrored)))
       ((in-range irq-registers-begin irq-registers-size address)
        (format t "Read from 0x~8,'0x in irq registers~%"address)
        0)
@@ -134,7 +134,7 @@
        value)
       ((in-range ram-begin ram-size address)
        (setf
-        (aref (psx-ram psx) (mod address #x200000))
+        (aref (psx-ram psx) (mod address ram-size-non-mirrored))
         value))
       ; Unimplemented.
       (t (error "Byte writes to 0x~8,'0X are unimplemented!~%" address)))))
@@ -152,7 +152,7 @@
        (format t "Wrote 0x~8,'0x to timers @ 0x~8,'0x!~%" value address)
        value)
       ((in-range ram-begin ram-size address)
-       (write-half-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
+       (write-half-word-to-byte-array (psx-ram psx) (mod address ram-size-non-mirrored) value))
       ((in-range irq-registers-begin irq-registers-size address)
        (format t "Wrote 0x~8,'0x to irq registers @ 0x~8,'0x!~%" value address)
        value)
@@ -214,7 +214,7 @@
        value)
       ; RAM
       ((in-range ram-begin ram-size address)
-       (write-word-to-byte-array (psx-ram psx) (mod address #x200000) value))
+       (write-word-to-byte-array (psx-ram psx) (mod address ram-size-non-mirrored) value))
       ((in-range dma-registers-begin dma-registers-size address)
        (psx-dma:set-register (psx-dma psx) (mod address dma-registers-begin) value))
       ; Unimplemented.

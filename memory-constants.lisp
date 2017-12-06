@@ -12,7 +12,8 @@
            #:timers-size #:dma-registers-begin #:dma-registers-size
            #:gpu-registers-begin #:gpu-registers-size
            #:bios-begin-unmasked-address #:sign-extend #:sign-extend-byte
-           #:wrap-word #:to-signed-byte-32))
+           #:wrap-word #:to-signed-byte-32 #:ram-exception-vector
+           #:rom-exception-vector #:ram-size-non-mirrored))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
@@ -24,6 +25,7 @@
 ; we just say the size is 8MiB and modulo all accesses by 2MiB.
 (defconstant ram-begin #x00000000)
 (defconstant ram-size (* 4 #x200000))
+(defconstant ram-size-non-mirrored #x200000)
 
 ; It would be nice to have a constant BIOS size here, but I'm not certain if all
 ; psx BIOS are of the same size. An additional unmasked address is used for the
@@ -62,6 +64,9 @@
 ; for the writables?
 (defconstant gpu-registers-begin #x1F801810)
 (defconstant gpu-registers-size 8)
+
+(defconstant rom-exception-vector #xBFC00180)
+(defconstant ram-exception-vector #x80000080)
 
 (declaim (ftype (function ((unsigned-byte 32))
                           keyword)
