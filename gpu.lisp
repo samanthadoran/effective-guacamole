@@ -67,9 +67,13 @@
    (ash (gpu-stat-dma-direction gpu-stat) 29)
    (ash (gpu-stat-even-odd-line gpu-stat) 31)))
 
+; TODO(Samantha): word-to-gpu-stat function.
+
 (defstruct gpu
   "A model psx gpu"
-  (gpu-stat (make-gpu-stat) :type gpu-stat))
+  (gpu-stat (make-gpu-stat) :type gpu-stat)
+  (textured-rectangle-x-flip nil :type boolean)
+  (textured-rectangle-y-flip nil :type boolean))
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -77,10 +81,39 @@
   (format t "Reading from gpu-read is unimplemented! Returning 0.~%")
   0)
 
+(declaim (ftype (function (gpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                draw-mode-settings))
+(defun draw-mode-settings (gpu value)
+  (let ((gpu-stat (gpu-gpu-stat gpu)))
+    (setf (gpu-stat-texture-page-x-base gpu-stat) (ldb (byte 4 0) value))
+    (setf (gpu-stat-texture-page-y-base gpu-stat) (ldb (byte 1 4) value))
+    (setf (gpu-stat-semi-transparency gpu-stat) (ldb (byte 2 5) value))
+    (setf (gpu-stat-texture-page-colors gpu-stat) (ldb (byte 2 7) value))
+    (setf (gpu-stat-dither-24-to-15-bit gpu-stat) (ldb (byte 1 9) value))
+    (setf (gpu-stat-draw-to-display-area gpu-stat) (ldb (byte 1 10) value))
+    (setf (gpu-stat-texture-disable gpu-stat) (ldb (byte 1 11) value)))
+  (setf (gpu-textured-rectangle-x-flip gpu) (ldb-test (byte 1 12) value))
+  (setf (gpu-textured-rectangle-y-flip gpu) (ldb-test (byte 1 13) value)))
+
+(declaim (ftype (function (gpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                set-drawing-area-top-left))
+(defun set-drawing-area-top-left (gpu value)
+  0)
+
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32)) write-gp0))
 (defun write-gp0 (gpu value)
-  (declare (ignore gpu))
   (format t "Wrote: 0x~8,'0x to GP0~%" value)
+  (case (ldb (byte 8 24) value)
+    (#xE1 (draw-mode-settings gpu value))
+    (#xE3 (set-drawing-area-top-left gpu value))
+    ; This is a noop?
+    (#x00 0)
+    (otherwise
+     (error "Unrecognized GP0 opcode 0x~2,'0x. Full word: 0x~8,'0x"
+            (ldb (byte 8 24) value)
+            value)))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))

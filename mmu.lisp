@@ -8,18 +8,8 @@
                           (unsigned-byte 32))
                 write-word-to-byte-array))
 (defun write-word-to-byte-array (array offset word)
-  (setf
-   (aref array offset)
-   (ldb (byte 8 0) word))
-  (setf
-   (aref array (+ 1 offset))
-   (ldb (byte 8 8) word))
-  (setf
-   (aref array (+ 2 offset))
-   (ldb (byte 8 16) word))
-  (setf
-   (aref array (+ 3 offset))
-   (ldb (byte 8 24) word))
+  (write-half-word-to-byte-array array offset (ldb (byte 16 0) word))
+  (write-half-word-to-byte-array array (+ 2 offset) (ldb (byte 16 16) word))
   word)
 
 (declaim (ftype (function ((simple-array (unsigned-byte 8))
