@@ -94,13 +94,15 @@
     (setf (gpu-stat-draw-to-display-area gpu-stat) (ldb (byte 1 10) value))
     (setf (gpu-stat-texture-disable gpu-stat) (ldb (byte 1 11) value)))
   (setf (gpu-textured-rectangle-x-flip gpu) (ldb-test (byte 1 12) value))
-  (setf (gpu-textured-rectangle-y-flip gpu) (ldb-test (byte 1 13) value)))
+  (setf (gpu-textured-rectangle-y-flip gpu) (ldb-test (byte 1 13) value))
+  value)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))
                 set-drawing-area-top-left))
 (defun set-drawing-area-top-left (gpu value)
-  0)
+  (declare (ignore gpu))
+  value)
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32)) write-gp0))
 (defun write-gp0 (gpu value)
