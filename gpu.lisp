@@ -69,6 +69,18 @@
 
 ; TODO(Samantha): word-to-gpu-stat function.
 
+; TODO(Samantha): The function slot of this struct causes all kinds of weird
+; problems for sbcl because functions with &rest arguments are never subtypes
+; of themselves. This causes compile failures for asdf if `:force t` and
+; requires either more than one compile without or choosiing to continue with
+; the newly defined slot type from the sbcl backtrace. Just remove the type?
+(defstruct gp0-operation
+  (function (lambda (gpu &rest values) (declare (ignore gpu values)) 0) :type (function (gpu &rest (unsigned-byte 32)) (unsigned-byte 32)))
+  (required-number-of-arguments 0 :type (unsigned-byte 8))
+  (current-number-of-arguments 0 :type (unsigned-byte 8))
+  (arguments nil :type list)
+  (arguments-tail nil :type list))
+
 (defstruct gpu
   "A model psx gpu"
   (gpu-stat (make-gpu-stat) :type gpu-stat)
@@ -91,7 +103,8 @@
   (display-start-x 0 :type (unsigned-byte 12))
   (display-end-x 0 :type (unsigned-byte 12))
   (display-start-y 0 :type (unsigned-byte 10))
-  (display-end-y 0 :type (unsigned-byte 10)))
+  (display-end-y 0 :type (unsigned-byte 10))
+  (gp0-op (make-gp0-operation) :type gp0-operation))
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -159,22 +172,86 @@
   (setf (gpu-stat-set-mask-bit (gpu-gpu-stat gpu)) (ldb (byte 1 0) value))
   (setf (gpu-stat-draw-pixels (gpu-gpu-stat gpu)) (ldb (byte 1 1) value)))
 
-(declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32)) write-gp0))
+(declaim (ftype (function (gpu (unsigned-byte 32)
+                               (unsigned-byte 32)
+                               (unsigned-byte 32)
+                               (unsigned-byte 32)
+                               (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-opaque-monochromatic-quadrilateral))
+(defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
+  (declare (ignore gpu))
+  (format t "GP0(#x28): render-opaque-monochromatic-quadrilateral is unimplemented!~%")
+  (format t "  Color is: 0x~8,'0x~%  v1 is: 0x~8,'0x~%  v2 is: 0x~8,'0x~%  v3 is: 0x~8,'0x~%  v4 is: 0x~8,'0x~%" color v1 v2 v3 v4)
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
+(defun assign-new-gp0-op (gpu value)
+  (let ((operation (lambda ()))
+        (required-arguments 0))
+    (case (ldb (byte 8 24) value)
+      (#x00
+        (setf required-arguments 1)
+        (setf operation (lambda (gpu &rest values) (declare (ignore gpu values)) 0)))
+      (#xE1
+        (setf required-arguments 1)
+        (setf operation #'draw-mode-settings))
+      (#xE2
+        (setf required-arguments 1)
+        (setf operation #'set-texture-window))
+      (#xE3
+        (setf required-arguments 1)
+        (setf operation #'set-drawing-area-top-left))
+      (#xE4
+        (setf required-arguments 1)
+        (setf operation #'set-drawing-area-bottom-right))
+      (#xE5
+        (setf required-arguments 1)
+        (setf operation #'set-drawing-offset))
+      (#xE6
+        (setf required-arguments 1)
+        (setf operation #'set-mask-bits))
+      (#x28
+        (setf required-arguments 5)
+        (setf operation #'render-opaque-monochromatic-quadrilateral))
+      (otherwise
+       (error "Unrecognized GP0 opcode 0x~2,'0x. Full word: 0x~8,'0x"
+              (ldb (byte 8 24) value)
+              value)))
+    (setf (gpu-gp0-op gpu)
+          (make-gp0-operation
+           :function operation
+           :required-number-of-arguments required-arguments
+           :current-number-of-arguments 0
+           :arguments (list)))
+    (setf (gp0-operation-arguments-tail (gpu-gp0-op gpu))
+          (gp0-operation-arguments (gpu-gp0-op gpu)))
+    (format t "Op is 0x~4,'0x~%" value))
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                write-gp0))
 (defun write-gp0 (gpu value)
-  (format t "Wrote: 0x~8,'0x to GP0~%" value)
-  (case (ldb (byte 8 24) value)
-    (#xE1 (draw-mode-settings gpu value))
-    (#xE2 (set-texture-window gpu value))
-    (#xE3 (set-drawing-area-top-left gpu value))
-    (#xE4 (set-drawing-area-bottom-right gpu value))
-    (#xE5 (set-drawing-offset gpu value))
-    (#xE6 (set-mask-bits gpu value))
-    ; This is a noop?
-    (#x00 0)
-    (otherwise
-     (error "Unrecognized GP0 opcode 0x~2,'0x. Full word: 0x~8,'0x"
-            (ldb (byte 8 24) value)
-            value)))
+  (when (zerop (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)))
+    (assign-new-gp0-op gpu value))
+  (let ((gp0-op (gpu-gp0-op gpu)))
+    (if (zerop (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu)))
+      (progn
+       (incf (gp0-operation-current-number-of-arguments gp0-op))
+       (setf (gp0-operation-arguments gp0-op) (list value))
+       (setf (gp0-operation-arguments-tail gp0-op) (gp0-operation-arguments gp0-op)))
+      (progn
+       (incf (gp0-operation-current-number-of-arguments gp0-op))
+       (setf (cdr (gp0-operation-arguments-tail gp0-op))
+             (cons value nil))
+       (setf (gp0-operation-arguments-tail gp0-op)
+             (cdr (gp0-operation-arguments-tail gp0-op)))))
+    (when (= (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu))
+             (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)))
+      (apply (gp0-operation-function gp0-op)
+        (cons gpu (gp0-operation-arguments gp0-op)))
+      (setf (gp0-operation-required-number-of-arguments gp0-op) 0)))
   0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) gpu-soft-reset))
