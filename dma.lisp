@@ -225,7 +225,7 @@
          (:from-ram
           (case (channel-port channel)
             (:gpu
-             (funcall (dma-write dma) gpu-registers-begin (funcall (dma-read dma) (logand base #x1FFFFC))))
+             (funcall (dma-write dma) +gpu-registers-begin+ (funcall (dma-read dma) (logand base #x1FFFFC))))
             (otherwise (error "Unhandled DMA channel ~A~%" (channel-port channel)))))
          (:to-ram
           (case (channel-port channel)
@@ -259,7 +259,7 @@
         (loop for i from (ldb (byte 8 24) header) downto 1 do
           (progn
            (setf base (logand #x1FFFFC (+ 4 base)))
-           (funcall (dma-write dma) gpu-registers-begin (funcall (dma-read dma) base))))
+           (funcall (dma-write dma) +gpu-registers-begin+ (funcall (dma-read dma) base))))
         ; TODO(Samantha): Some sources say that the psx only reads the high bit
         ; to test for end of the list.
         (when (or (ldb-test (byte 32 0) (logand header #x800000))(= #xFFFFFF (ldb (byte 24 0) header)))

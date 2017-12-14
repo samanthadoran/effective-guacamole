@@ -90,7 +90,7 @@
 (defun power-on (cpu)
   "Sets the cpu to the initial power up state."
   ; TODO(Samantha): Fully implement.
-  (setf (cpu-program-counter cpu) bios-begin-unmasked-address)
+  (setf (cpu-program-counter cpu) +bios-begin-unmasked-address+)
   (setf
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) 4))))
@@ -219,8 +219,8 @@
   ; cop0_12 (status register)
   (setf (cpu-program-counter cpu)
         (if (ldb-test (byte 1 22) (cop0:cop0-status-register (cpu-cop0 cpu)))
-          rom-exception-vector
-          ram-exception-vector))
+          +rom-exception-vector+
+          +ram-exception-vector+))
   (setf
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) 4)))
