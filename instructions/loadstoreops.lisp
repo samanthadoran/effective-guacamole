@@ -126,7 +126,7 @@
                     (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type sb #x28
-  (when (not (is-cache-isolated cpu))
+  (unless (is-cache-isolated cpu)
     (write-cpu-byte
      cpu
      (wrap-word
@@ -143,7 +143,7 @@
            (aref (cpu-registers cpu) source-register)))))
     (if (/= 0 (mod address 2))
       (trigger-exception cpu :cause :address-write-error)
-      (when (not (is-cache-isolated cpu))
+      (unless (is-cache-isolated cpu)
         (write-cpu-half-word
          cpu
          address
@@ -180,7 +180,7 @@
           (+
            (sign-extend immediate)
            (aref (cpu-registers cpu) source-register)))))
-    (when (not (is-cache-isolated cpu))
+    (unless (is-cache-isolated cpu)
       (if (/= 0 (mod address 4))
         (trigger-exception cpu :cause :address-write-error)
         (write-cpu-word

@@ -250,7 +250,7 @@
 (defun run-dma-linked-list (dma channel)
   (let ((channel-control (channel-channel-control channel))
         (base (logand #x1FFFFC (channel-base channel))))
-    (when (not (eql :gpu (channel-port channel)))
+    (unless (eql :gpu (channel-port channel))
       (error "Linked list dma not implemented for anything other than GPU!~%"))
     (when (eql :to-ram (channel-control-direction channel-control))
       (error "To ram dma linked list transfers are invalid!~%"))

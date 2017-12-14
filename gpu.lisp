@@ -225,7 +225,7 @@
   (declare (ignore command coordinates))
   (format t "GP0(#xA0): load-image is not fully implemented!~%")
   (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) (* (ldb (byte 16 0) size) (ldb (byte 16 16) size)))
-  (when (not (zerop (mod (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2)))
+  (unless (zerop (mod (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
     (incf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))))
   (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) (/ (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
   ; TODO(Samantha): This is absolutely hideous and there is no way it's
