@@ -54,7 +54,8 @@
    (ash (gpu-stat-texture-disable gpu-stat) 15)
    (ash (gpu-stat-horizontal-resolution-2 gpu-stat) 16)
    (ash (gpu-stat-horizontal-resolution-1 gpu-stat) 17)
-   (ash (gpu-stat-vertical-resolution gpu-stat) 19)
+   ; TODO(Samantha): Remove this hack once we properly emulate bit31
+   (logand 0 (ash (gpu-stat-vertical-resolution gpu-stat) 19))
    (ash (gpu-stat-video-mode gpu-stat) 20)
    (ash (gpu-stat-display-area-color-depth gpu-stat) 21)
    (ash (gpu-stat-vertical-interlace gpu-stat) 22)
@@ -78,6 +79,7 @@
   (function (lambda (gpu &rest values) (declare (ignore gpu values)) 0) :type (function (gpu &rest (unsigned-byte 32)) (unsigned-byte 32)))
   (required-number-of-arguments 0 :type (unsigned-byte 8))
   (current-number-of-arguments 0 :type (unsigned-byte 8))
+  (remaining-image-words 0 :type (unsigned-byte 32))
   (arguments nil :type list)
   (arguments-tail nil :type list))
 
@@ -180,9 +182,112 @@
                           (unsigned-byte 32))
                 render-opaque-monochromatic-quadrilateral))
 (defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
-  (declare (ignore gpu))
+  (declare (ignore gpu color v1 v2 v3 v4))
   (format t "GP0(#x28): render-opaque-monochromatic-quadrilateral is unimplemented!~%")
-  (format t "  Color is: 0x~8,'0x~%  v1 is: 0x~8,'0x~%  v2 is: 0x~8,'0x~%  v3 is: 0x~8,'0x~%  v4 is: 0x~8,'0x~%" color v1 v2 v3 v4)
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                clear-texture-cache))
+(defun clear-texture-cache (gpu value)
+  (declare (ignore gpu))
+  (format t "GP0(#x01): clear-texture-cache is unimplemented (because texture cache is not implemented)!~%")
+  value)
+
+(declaim (ftype (function (gpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                load-image-word))
+(defun load-image-word (gpu value)
+  (declare (ignore value))
+  (decf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)))
+  (if (not (zerop
+            (gp0-operation-remaining-image-words
+             (gpu-gp0-op gpu))))
+    ; Only resetting the current number of arguments and the actual arguments
+    ; list allows us to just reuse the existing gp0-operation struct, including
+    ; the remaining-image-words
+    (progn
+     (setf (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu)) 0)
+     (setf (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)) 1)
+     (setf (gp0-operation-arguments (gpu-gp0-op gpu)) (list)))
+    ; Setting this to 0 allows for the next word sent
+    ; to GP0 to resume normally opcode decoding.
+    (setf
+     (gp0-operation-required-number-of-arguments
+      (gpu-gp0-op gpu))
+     0))
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                load-image))
+(defun load-image (gpu command coordinates size)
+  (declare (ignore command coordinates))
+  (format t "GP0(#xA0): load-image is not fully implemented!~%")
+  (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) (* (ldb (byte 16 0) size) (ldb (byte 16 16) size)))
+  (when (not (zerop (mod (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2)))
+    (incf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))))
+  (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) (/ (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
+  ; TODO(Samantha): This is absolutely hideous and there is no way it's
+  ; performant. Consider a better method of loading the image into vram.
+  ; Create a fake GP0-operation that will load the pixels into vram one by one.
+  ; This bypasses needing to inspect GP0(#xA0) to determine the number of
+  ; arguments we would need.
+  (setf (gpu-gp0-op gpu)
+        (make-gp0-operation
+         :function #'load-image-word
+         :required-number-of-arguments 1
+         :current-number-of-arguments 0
+         :remaining-image-words (gp0-operation-remaining-image-words (gpu-gp0-op gpu))
+         :arguments (list)))
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                save-image))
+(defun save-image (gpu command coordinates size)
+  (declare (ignore gpu command coordinates size))
+  (format t "GP0(#xC0): save-image-from-vram is unimplemented!~%")
+  0)
+
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-opaque-shaded-quadrilateral))
+(defun render-opaque-shaded-quadrilateral (gpu color1 v1 color2 v2 color3 v3 color4 v4)
+  (declare (ignore gpu color1 color2 color3 color4 v1 v2 v3 v4))
+  (format t "GP0(#x38): render-opaque-shaded-quadrilateral is unimplemented!~%")
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-opaque-texture-blended-quadrilateral))
+(defun render-opaque-texture-blended-quadrilateral (gpu color1
+                                                        v1 texture-coordinate1-and-palette
+                                                        v2 texture-coordinate2-and-texture-page
+                                                        v3 texture-coordinate3
+                                                        v4 texture-coordinate4)
+  (declare (ignore gpu color1 v1 texture-coordinate1-and-palette
+                   v2 texture-coordinate2-and-texture-page
+                   v3 texture-coordinate3 v4 texture-coordinate4))
+  (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral is unimplemented!~%")
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-opaque-shaded-triangle))
+(defun render-opaque-shaded-triangle (gpu color1 v1 color2 v2 color3 v3)
+  (declare (ignore gpu color1 color2 color3 v1 v2 v3))
+  (format t "GP0(#x30): render-opaque-shaded-triangle is unimplemented!~%")
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
@@ -193,6 +298,24 @@
       (#x00
         (setf required-arguments 1)
         (setf operation (lambda (gpu &rest values) (declare (ignore gpu values)) 0)))
+      (#x30
+        (setf required-arguments 6)
+        (setf operation #'render-opaque-shaded-triangle))
+      (#x38
+        (setf required-arguments 8)
+        (setf operation #'render-opaque-shaded-quadrilateral))
+      (#x2C
+        (setf required-arguments 9)
+        (setf operation #'render-opaque-texture-blended-quadrilateral))
+      (#xA0
+        (setf required-arguments 3)
+        (setf operation #'load-image))
+      (#xC0
+        (setf required-arguments 3)
+        (setf operation #'save-image))
+      (#x01
+        (setf required-arguments 1)
+        (setf operation #'clear-texture-cache))
       (#xE1
         (setf required-arguments 1)
         (setf operation #'draw-mode-settings))
@@ -249,9 +372,9 @@
              (cdr (gp0-operation-arguments-tail gp0-op)))))
     (when (= (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu))
              (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)))
+      (setf (gp0-operation-required-number-of-arguments gp0-op) 0)
       (apply (gp0-operation-function gp0-op)
-        (cons gpu (gp0-operation-arguments gp0-op)))
-      (setf (gp0-operation-required-number-of-arguments gp0-op) 0)))
+        (cons gpu (gp0-operation-arguments gp0-op)))))
   0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) gpu-soft-reset))
@@ -287,8 +410,10 @@
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) reset-command-buffer))
 (defun reset-command-buffer (gpu)
-  (declare (ignore gpu))
-  (format t "GP1(#x01) Is not yet implemented! (Because the command buffer isn'timplemented.)~%")
+  (setf (gpu-gp0-op gpu)
+        (make-gp0-operation :current-number-of-arguments 0
+                            :required-number-of-arguments 0))
+  (format t "GP1(#x01) Is not yet implemented! (Because the command buffer isn't implemented.)~%")
   0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) acknowledge-irq))
