@@ -107,7 +107,8 @@
        (#x19E (ldb (byte 8 16) (spu-channel-status spu)))
        (#x1A0
          (when *debug-spu*
-           (format t "Spu register at location 0x~8,'0x has an unknown purpose and is unimplemented!~%"
+           (format t "Spu register at location 0x~8,'0x ~
+                      has an unknown purpose and is unimplemented!~%"
                    (+ offset +spu-registers-begin+)))
          0)
        (#x1A2 (spu-sound-ram-reverb-work-area-start-address spu))
@@ -125,12 +126,14 @@
        (#x1BA (spu-current-main-volume-right spu))
        (#x1BC
          (when *debug-spu*
-           (format t "Spu register at location 0x~8,'0x has an unknown purpose and is unimplemented!~%"
+           (format t "Spu register at location 0x~8,'0x ~
+                      has an unknown purpose and is unimplemented!~%"
                    (+ offset +spu-registers-begin+)))
          0)
        (#x1BE
          (when *debug-spu*
-           (format t "Spu register at location 0x~8,'0x has an unknown purpose and is unimplemented!~%"
+           (format t "Spu register at location 0x~8,'0x ~
+                      has an unknown purpose and is unimplemented!~%"
                    (+ offset +spu-registers-begin+)))
          0)
        (otherwise
@@ -138,7 +141,8 @@
                (+ offset +spu-registers-begin+)))))
     (t
      (when *debug-spu*
-       (format t "Internal registers and reverb configuration registers are unimplemented!~%"))
+       (format t "Internal registers and reverb configuration ~
+                  registers are unimplemented!~%"))
      0)))
 
 (declaim (ftype (function (spu (unsigned-byte 32) (unsigned-byte 16))
@@ -187,7 +191,8 @@
        (#x19E (setf (ldb (byte 8 16) (spu-channel-status spu)) value))
        (#x1A0
          (when *debug-spu*
-           (format t "Spu register at location 0x~8,'0x has an unknown purpose and is unimplemented!~%"
+           (format t "Spu register at location 0x~8,'0x ~
+                      has an unknown purpose and is unimplemented!~%"
                    (+ offset +spu-registers-begin+)))
          0)
        (#x1A2 (setf (spu-sound-ram-reverb-work-area-start-address spu) value))
@@ -205,12 +210,14 @@
        (#x1BA (setf (spu-current-main-volume-right spu) value))
        (#x1BC
          (when *debug-spu*
-           (format t "Spu register at location 0x~8,'0x has an unknown purpose and is unimplemented!~%"
+           (format t "Spu register at location 0x~8,'0x ~
+                      has an unknown purpose and is unimplemented!~%"
                    (+ offset +spu-registers-begin+)))
          0)
        (#x1BE
          (when *debug-spu*
-           (format t "Spu register at location 0x~8,'0x has an unknown purpose and is unimplemented!~%"
+           (format t "Spu register at location 0x~8,'0x ~
+                      has an unknown purpose and is unimplemented!~%"
                    (+ offset +spu-registers-begin+)))
          0)
        (otherwise
@@ -218,5 +225,6 @@
                (+ offset +spu-registers-begin+)))))
     (t
      (when *debug-spu*
-       (format t "Internal registers and reverb configuration registers are unimplemented!~%"))
+       (format t "Internal registers and reverb configuration ~
+                  registers are unimplemented!~%"))
      0)))

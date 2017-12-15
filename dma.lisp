@@ -155,20 +155,19 @@
                           (unsigned-byte 32))
                 set-register))
 (defun set-register (dma offset value)
+  ; Are we setting one of the channel registers?
   (if (< -1 offset #x70)
-    ;We're setting one of the channel registers
-    (progn
-     ; Grab the top digit of offset, it happens to be our index into
-     ; dma-channels while it's less than #x70.
-     (let ((channel (aref (dma-channels dma) (ldb (byte 4 4) offset))))
-       (case (ldb (byte 4 0) offset)
-         (0 (setf (channel-base channel) (ldb (byte 24 0) value)))
-         (4 (set-channel-block-control channel value) value)
-         (8 (setf (channel-channel-control channel) (word-to-channel-control value)) value)
-         (otherwise (error "Unhandle dma write of 0x~8,'0x at offset 0x~8,'0x~%" value offset)))
-       (when (active channel)
-         (run-dma dma channel))
-       value))
+    ; Grab the top digit of offset, it happens to be our index into
+    ; dma-channels while it's less than #x70.
+    (let ((channel (aref (dma-channels dma) (ldb (byte 4 4) offset))))
+      (case (ldb (byte 4 0) offset)
+        (0 (setf (channel-base channel) (ldb (byte 24 0) value)))
+        (4 (set-channel-block-control channel value) value)
+        (8 (setf (channel-channel-control channel) (word-to-channel-control value)) value)
+        (otherwise (error "Unhandle dma write of 0x~8,'0x at offset 0x~8,'0x~%" value offset)))
+      (when (active channel)
+        (run-dma dma channel))
+      value)
     ; We're setting one of the general purpose registers
     (case offset
       (#x70 (setf (dma-control-register dma) value))

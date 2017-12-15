@@ -76,7 +76,8 @@
 ; requires either more than one compile without or choosiing to continue with
 ; the newly defined slot type from the sbcl backtrace. Just remove the type?
 (defstruct gp0-operation
-  (function (lambda (gpu &rest values) (declare (ignore gpu values)) 0) :type (function (gpu &rest (unsigned-byte 32)) (unsigned-byte 32)))
+  (function (lambda (gpu &rest values) (declare (ignore gpu values)) 0)
+            :type (function (gpu &rest (unsigned-byte 32)) (unsigned-byte 32)))
   (required-number-of-arguments 0 :type (unsigned-byte 8))
   (current-number-of-arguments 0 :type (unsigned-byte 8))
   (remaining-image-words 0 :type (unsigned-byte 32))
@@ -183,7 +184,8 @@
                 render-opaque-monochromatic-quadrilateral))
 (defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
   (declare (ignore gpu color v1 v2 v3 v4))
-  (format t "GP0(#x28): render-opaque-monochromatic-quadrilateral is unimplemented!~%")
+  (format t "GP0(#x28): render-opaque-monochromatic-quadrilateral ~
+             is unimplemented!~%")
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -191,7 +193,8 @@
                 clear-texture-cache))
 (defun clear-texture-cache (gpu value)
   (declare (ignore gpu))
-  (format t "GP0(#x01): clear-texture-cache is unimplemented (because texture cache is not implemented)!~%")
+  (format t "GP0(#x01): clear-texture-cache is unimplemented ~
+             (because texture cache is not implemented)!~%")
   value)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -279,7 +282,8 @@
   (declare (ignore gpu color1 v1 texture-coordinate1-and-palette
                    v2 texture-coordinate2-and-texture-page
                    v3 texture-coordinate3 v4 texture-coordinate4))
-  (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral is unimplemented!~%")
+  (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
+             is unimplemented!~%")
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
@@ -351,7 +355,7 @@
            :arguments (list)))
     (setf (gp0-operation-arguments-tail (gpu-gp0-op gpu))
           (gp0-operation-arguments (gpu-gp0-op gpu)))
-    (format t "Op is 0x~4,'0x~%" value))
+    (format t "GP0(#x~2,'0x)~%" value))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -415,7 +419,8 @@
   (setf (gpu-gp0-op gpu)
         (make-gp0-operation :current-number-of-arguments 0
                             :required-number-of-arguments 0))
-  (format t "GP1(#x01) Is not yet implemented! (Because the command buffer isn't implemented.)~%")
+  (format t "GP1(#x01) Is not yet implemented! ~
+             (Because the command buffer isn't implemented.)~%")
   0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) acknowledge-irq))
@@ -472,7 +477,7 @@
                           (unsigned-byte 32))
                 write-gp1))
 (defun write-gp1 (gpu value)
-  (format t "Wrote: 0x~8,'0x to GP1~%" value)
+  (format t "GP1(#x~2,'0x)~%" value)
   (case (ldb (byte 8 24) value)
     (#x00 (gpu-soft-reset gpu))
     (#x01 (reset-command-buffer gpu))
