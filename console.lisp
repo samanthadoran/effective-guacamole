@@ -10,6 +10,7 @@
   "A model psx"
   (cpu (make-cpu) :type cpu)
   (gpu (psx-gpu:make-gpu) :type psx-gpu:gpu)
+  (spu (psx-spu:make-spu) :type psx-spu:spu)
   ; TODO(Samantha): I'm not convinced this is going to work out cleanly.
   (dma (psx-dma:make-dma) :type psx-dma:dma)
   (bios-rom

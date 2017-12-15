@@ -106,9 +106,8 @@
           (instruction-segment instruction)
           (instruction-masked-opcode instruction)))
 
-(declaim
- (ftype (function
-         (cpu (unsigned-byte 5) (unsigned-byte 32)) (unsigned-byte 32))
+(declaim (ftype (function (cpu (unsigned-byte 5) (unsigned-byte 32))
+                          (unsigned-byte 32))
         set-register))
 (defun set-register (cpu index value)
   (setf (aref (cpu-delay-registers cpu) index) value)

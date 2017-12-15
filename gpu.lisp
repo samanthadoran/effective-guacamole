@@ -224,10 +224,12 @@
 (defun load-image (gpu command coordinates size)
   (declare (ignore command coordinates))
   (format t "GP0(#xA0): load-image is not fully implemented!~%")
-  (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) (* (ldb (byte 16 0) size) (ldb (byte 16 16) size)))
+  (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))
+        (* (ldb (byte 16 0) size) (ldb (byte 16 16) size)))
   (unless (zerop (mod (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
     (incf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))))
-  (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) (/ (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
+  (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))
+        (/ (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
   ; TODO(Samantha): This is absolutely hideous and there is no way it's
   ; performant. Consider a better method of loading the image into vram.
   ; Create a fake GP0-operation that will load the pixels into vram one by one.

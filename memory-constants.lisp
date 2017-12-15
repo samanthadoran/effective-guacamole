@@ -13,7 +13,9 @@
            #:+gpu-registers-begin+ #:+gpu-registers-size+
            #:+bios-begin-unmasked-address+ #:sign-extend #:sign-extend-byte
            #:wrap-word #:to-signed-byte-32 #:+ram-exception-vector+
-           #:+rom-exception-vector+ #:+ram-size-non-mirrored+))
+           #:+rom-exception-vector+ #:+ram-size-non-mirrored+
+           #:+spu-voice-registers-begin+ #:+spu-voice-registers-size+
+           #:+spu-control-registers-begin+ #:+spu-control-registers-size+))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
@@ -51,6 +53,12 @@
 
 (defconstant +spu-registers-begin+ #x1F801C00)
 (defconstant +spu-registers-size+ 640)
+
+(defconstant +spu-voice-registers-begin+ #x1F801C00)
+(defconstant +spu-voice-registers-size+ #x180)
+
+(defconstant +spu-control-registers-begin+ #x1F801D80)
+(defconstant +spu-control-registers-size+ #x40)
 
 ; Timers seems to be about 0x30 in size, but only has three registers for
 ; each of the four timers? Weird.

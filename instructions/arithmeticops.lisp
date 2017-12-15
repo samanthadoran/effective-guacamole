@@ -114,7 +114,7 @@
     (setf (cpu-hi cpu) (ldb (byte 32 32) result))))
 
 (def-r-type div #xFF1A
-  (if (= (aref (cpu-registers cpu) target-register) 0)
+  (if (zerop (aref (cpu-registers cpu) target-register))
     ; Division by zero is not an exception, it's just the max/min value
     (progn
      (setf (cpu-hi cpu)
@@ -146,7 +146,7 @@
               (aref (cpu-registers cpu) target-register)))))))
 
 (def-r-type divu #xFF1B
-  (if (= (aref (cpu-registers cpu) target-register) 0)
+  (if (zerop (aref (cpu-registers cpu) target-register))
     ; Division by zero is not an exception, it's just the max value
     (progn
      (setf (cpu-hi cpu) (aref (cpu-registers cpu) source-register))

@@ -74,8 +74,8 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +spu-registers-begin+ +spu-registers-size+ address)
-       ; (format t "Read from 0x~8,'0x in spu registers~%" address)
-       0)
+       (psx-spu:read-spu-half-word (psx-spu psx)
+                                   (mod address +spu-registers-begin+)))
       ((in-range +ram-begin+ +ram-size+ address)
        (read-half-word-from-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
@@ -120,7 +120,7 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +expansion-2-begin+ +expansion-2-size+ address)
-       (format t "Wrote 0x~8,'0x to expansion2 @ 0x~8,'0x!~%" value address)
+       (format t "Wrote 0x~2,'0x to expansion2 @ 0x~8,'0x!~%" value address)
        value)
       ((in-range +ram-begin+ +ram-size+ address)
        (setf
@@ -136,15 +136,15 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +spu-registers-begin+ +spu-registers-size+ address)
-       ; (format t "Wrote 0x~8,'0x to spu @ 0x~8,'0x!~%" value address)
-       value)
+       (psx-spu:write-spu-half-word (psx-spu psx)
+                                    (mod address +spu-registers-begin+) value))
       ((in-range +timers-begin+ +timers-size+ address)
-       (format t "Wrote 0x~8,'0x to timers @ 0x~8,'0x!~%" value address)
+       (format t "Wrote 0x~4,'0x to timers @ 0x~8,'0x!~%" value address)
        value)
       ((in-range +ram-begin+ +ram-size+ address)
        (write-half-word-to-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+) value))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
-       (format t "Wrote 0x~8,'0x to irq registers @ 0x~8,'0x!~%" value address)
+       (format t "Wrote 0x~4,'0x to irq registers @ 0x~8,'0x!~%" value address)
        value)
       ; Unimplemented.
       (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address)))))

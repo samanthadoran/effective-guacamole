@@ -230,14 +230,12 @@
          (:to-ram
           (case (channel-port channel)
             (:otc
-             (funcall
-              (dma-write dma)
-              (logand base #x1FFFFC)
-              (if (= i 1)
-                ; End of Table
-                #xFFFFFF
-                ; Previous link
-                (ldb (byte 21 0) (wrap-word (- base 4))))))
+             (funcall (dma-write dma) (logand base #x1FFFFC)
+                      (if (= i 1)
+                        ; End of Table
+                        #xFFFFFF
+                        ; Previous link
+                        (ldb (byte 21 0) (wrap-word (- base 4))))))
             (otherwise (error "Unhandled DMA channel ~A~%" (channel-port channel)))))
          (otherwise (error "Invalid DMA direction ~A~%" (channel-control-direction channel-control))))
        (setf
