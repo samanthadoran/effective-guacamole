@@ -9,12 +9,67 @@
 
 (defparameter *debug-spu* nil)
 
+(defstruct adsr
+  "A representation of an spu voice's ADSR (attack decay sustain release)
+   envelope."
+  (sustain-level #x800 :type (integer #x800 #x8000))
+  (decay-step -8  :type (signed-byte 5) :read-only t)
+  (decay-shift 0 :type (unsigned-byte 4))
+  (decay-direction :decrease :type keyword :read-only t)
+  (decay-mode :exponential :type keyword :read-only t)
+  (attack-step 7 :type (integer 4 7))
+  (attack-shift 0 :type (unsigned-byte 5))
+  (attack-direction :increase :type keyword :read-only t)
+  (attack-mode :linear :type keyword)
+  (release-step -8  :type (signed-byte 5) :read-only t)
+  (release-shift 0 :type (unsigned-byte 5))
+  (release-direction :decrease :type keyword :read-only t)
+  (release-mode :linear :type keyword)
+  ; TODO(Samantha): The sustain values here talk about increasing or decreasing.
+  ; I don't understand, at all.
+  ; This should be interpreted as negative depending on sustain direction
+  (sustain-step 7 :type (integer 4 7))
+  (sustain-shift 0 :type (unsigned-byte 5))
+  (sustain-direction :increase :type keyword)
+  (sustain-mode :linear :type keyword))
+
+(declaim (ftype (function (adsr) (unsigned-byte 32)) adsr-to-word))
+(defun adsr-to-word (adsr)
+  (logior
+   (ash (ldb (byte 4 0) (1- (floor (adsr-sustain-level adsr) #x800))) 0)
+   (ash (adsr-decay-shift adsr) 4)
+   (ash (ldb (byte 2 0) (- (adsr-attack-step adsr) 4)) 8)
+   (ash (adsr-attack-shift adsr) 10)
+   (ash (if (eql (adsr-attack-mode adsr) :linear) 0 1) 15)
+   (ash (adsr-release-shift adsr) 16)
+   (ash (if (eql (adsr-release-mode adsr) :linear) 0 1) 21)
+   (ash (ldb (byte 2 0) (- (adsr-sustain-step adsr) 4)) 22)
+   (ash (adsr-sustain-shift adsr) 24)
+   (ash 0 29)
+   (ash (if (eql (adsr-sustain-direction adsr) :increase) 0 1) 30)
+   (ash (if (eql (adsr-sustain-mode adsr) :linear) 0 1) 31)))
+
+(declaim (ftype (function ((unsigned-byte 32)) adsr) word-to-adsr))
+(defun word-to-adsr (word)
+  (make-adsr
+   :sustain-level (* #x800 (1+ (ldb (byte 4 0) word)))
+   :decay-shift (ldb (byte 4 4) word)
+   :attack-step (+ 4 (ldb (byte 2 8) word))
+   :attack-shift (ldb (byte 5 10) word)
+   :attack-mode (if (ldb-test (byte 1 15) word) :exponential :linear)
+   :release-shift (ldb (byte 5 16) word)
+   :release-mode (if (ldb-test (byte 1 21) word) :exponential :linear)
+   :sustain-step (+ 4 (ldb (byte 2 22) word))
+   :sustain-shift (ldb (byte 5 24) word)
+   :sustain-direction (if (ldb-test (byte 1 30) word) :decrease :increase)
+   :sustain-mode (if (ldb-test (byte 1 31) word) :exponential :linear)))
+
 (defstruct voice
   (volume-left 0 :type (unsigned-byte 16))
   (volume-right 0 :type (unsigned-byte 16))
   (adpcm-sample-rate 0 :type (unsigned-byte 16))
   (adpcm-start-address 0 :type (unsigned-byte 16))
-  (adsr 0 :type (unsigned-byte 32))
+  (adsr (make-adsr) :type adsr)
   (adsr-volume 0 :type (unsigned-byte 16))
   (adpcm-repeat-address 0 :type (unsigned-byte 16)))
 
@@ -79,8 +134,8 @@
          (#x4 (voice-adpcm-sample-rate voice))
          (#x6 (voice-adpcm-start-address voice))
          ; #x8 and #xA are two different pieces of the adsr register.
-         (#x8 (ldb (byte 16 0) (voice-adsr voice)))
-         (#xA (ldb (byte 16 16) (voice-adsr voice)))
+         (#x8 (ldb (byte 16 0) (adsr-to-word (voice-adsr voice))))
+         (#xA (ldb (byte 16 16) (adsr-to-word (voice-adsr voice))))
          (#xC (voice-adsr-volume voice))
          (#xE (voice-adpcm-repeat-address voice))
          (otherwise
@@ -160,8 +215,18 @@
          (#x4 (setf (voice-adpcm-sample-rate voice) value))
          (#x6 (setf (voice-adpcm-start-address voice) value))
          ; #x8 and #xA are two different pieces of the adsr register.
-         (#x8 (setf (ldb (byte 16 0) (voice-adsr voice)) value))
-         (#xA (setf (ldb (byte 16 16) (voice-adsr voice)) value))
+         (#x8
+           (setf (voice-adsr voice)
+                 (word-to-adsr
+                  (logior value
+                          (logand #xFFFF0000
+                                  (adsr-to-word (voice-adsr voice)))))))
+         (#xA
+           (setf (voice-adsr voice)
+                 (word-to-adsr
+                  (logior (ash value 16)
+                          (logand #x0000FFFF
+                                  (adsr-to-word (voice-adsr voice)))))))
          (#xC (setf (voice-adsr-volume voice) value))
          (#xE (setf (voice-adpcm-repeat-address voice) value))
          (otherwise
@@ -193,8 +258,7 @@
          (when *debug-spu*
            (format t "Spu register at location 0x~8,'0x ~
                       has an unknown purpose and is unimplemented!~%"
-                   (+ offset +spu-registers-begin+)))
-         0)
+                   (+ offset +spu-registers-begin+))))
        (#x1A2 (setf (spu-sound-ram-reverb-work-area-start-address spu) value))
        (#x1A4 (setf (spu-sound-ram-irq-address spu) value))
        (#x1A6 (setf (spu-sound-ram-data-transfer-address spu) value))
@@ -212,19 +276,17 @@
          (when *debug-spu*
            (format t "Spu register at location 0x~8,'0x ~
                       has an unknown purpose and is unimplemented!~%"
-                   (+ offset +spu-registers-begin+)))
-         0)
+                   (+ offset +spu-registers-begin+))))
        (#x1BE
          (when *debug-spu*
            (format t "Spu register at location 0x~8,'0x ~
                       has an unknown purpose and is unimplemented!~%"
-                   (+ offset +spu-registers-begin+)))
-         0)
+                   (+ offset +spu-registers-begin+))))
        (otherwise
         (error "Unrecognized spu address 0x~8,'0x!~%"
                (+ offset +spu-registers-begin+)))))
     (t
      (when *debug-spu*
        (format t "Internal registers and reverb configuration ~
-                  registers are unimplemented!~%"))
-     0)))
+                  registers are unimplemented!~%"))))
+  value)
