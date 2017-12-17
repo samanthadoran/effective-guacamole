@@ -1,6 +1,12 @@
 (defpackage #:psx-gpu
   (:nicknames #:gpu)
-  (:use :cl)
+  (:use :cl
+        :cepl
+        :cepl.sdl2
+        :swank
+        :livesupport
+        :cepl.skitter.sdl2
+        :cepl.devil)
   (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
            #:read-gpu #:write-gpu))
 
@@ -83,6 +89,10 @@
   (remaining-image-words 0 :type (unsigned-byte 32))
   (arguments nil :type list)
   (arguments-tail nil :type list))
+
+(defvar *viewport* (make-viewport '(1024 512)))
+; TODO(Samantha): Move this into a gpu power on?
+(cepl:repl)
 
 (defstruct gpu
   "A model psx gpu"
@@ -292,9 +302,39 @@
                           (unsigned-byte 32))
                 render-opaque-shaded-triangle))
 (defun render-opaque-shaded-triangle (gpu color1 v1 color2 v2 color3 v3)
-  (declare (ignore gpu color1 color2 color3 v1 v2 v3))
-  (format t "GP0(#x30): render-opaque-shaded-triangle is unimplemented!~%")
+  (declare (ignore gpu))
+  ; TODO(Samantha): We shouldn't really draw from here. We should accumulate all
+  ; of these vertices in a larger buffer and _then_ draw.
+  (draw (make-buffer-stream
+         (list
+          (make-gpu-array
+           (list (list (word-to-position v1) (word-to-color color1))
+                 (list (word-to-position v2) (word-to-color color2))
+                 (list (word-to-position v3) (word-to-color color3)))
+           :element-type 'our-vert))
+         :length 3))
   0)
+
+; TODO(Samantha): These probably should be different types. Offload the type
+; conversion to the shaders. Also, we should use the interal g-pc type.
+(defstruct-g our-vert
+  (position :vec4)
+  (color :vec4))
+
+(defun-g vert-stage ((vert our-vert))
+  (values (our-vert-position vert) (our-vert-color vert)))
+
+(defun-g frag-stage ((color :vec4))
+  color)
+
+(def-g-> some-pipeline ()
+  :vertex (vert-stage our-vert)
+  :fragment (frag-stage :vec4))
+
+(defun draw (vert-stream)
+  (with-viewport *viewport*
+    (map-g #'some-pipeline vert-stream)
+    (swap)))
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
 (defun assign-new-gp0-op (gpu value)
@@ -357,6 +397,22 @@
           (gp0-operation-arguments (gpu-gp0-op gpu)))
     (format t "GP0(#x~2,'0x)~%" value))
   0)
+
+(declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-color))
+(defun word-to-color (word)
+  (v!
+   (/ (ldb (byte 8 0) word) 255.0)
+   (/ (ldb (byte 8 8) word) 255.0)
+   (/ (ldb (byte 8 16) word) 255.0)
+   0f0))
+
+(declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-position))
+(defun word-to-position (word)
+  (v!
+   (- (/ (ldb (byte 16 0) word) 512.0) 1)
+   (- 1 (/ (ldb (byte 16 16) word) 256.0))
+   0
+   1f0))
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))

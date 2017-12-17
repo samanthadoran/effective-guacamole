@@ -1,6 +1,12 @@
 (in-package #:asdf-user)
 
 (defsystem #:psx
+  :depends-on (#:cepl
+               #:cepl.sdl2
+               #:swank
+               #:livesupport
+               #:cepl.skitter.sdl2
+               #:cepl.devil)
   :components (
                (:file "memory-constants")
                (:file "cop0")
