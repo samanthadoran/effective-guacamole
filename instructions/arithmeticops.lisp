@@ -185,7 +185,7 @@
     ; TODO(Samantha): Figure out a testing framework for common lisp.
     (when (< result #x-80000000)
       (trigger-exception cpu :cause :arithmetic-overflow))
-    (set-register cpu destination-register result)))
+    (set-register cpu destination-register (wrap-word result))))
 
 (def-r-type subu #xFF23
   (set-register
