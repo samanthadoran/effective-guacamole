@@ -13,6 +13,8 @@
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 1)))
 
+(defparameter *debug-gpu* nil)
+
 ; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
 (defstruct gpu-stat
   (texture-page-x-base 0 :type (unsigned-byte 4))
@@ -122,7 +124,8 @@
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
   (declare (ignore gpu))
-  (format t "Reading from gpu-read is unimplemented! Returning 0.~%")
+  (when *debug-gpu*
+    (format t "Reading from gpu-read is unimplemented! Returning 0.~%"))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -168,6 +171,8 @@
                           (unsigned-byte 32))
                 set-drawing-offset))
 (defun set-drawing-offset (gpu value)
+  (when (car *gpu-list*)
+    (draw gpu))
   (let ((x (ldb (byte 11 0) value)) (y (ldb (byte 11 11) value)))
     ; Offsets are (signed-byte 11), peform the conversions if necessary.
     (when (ldb-test (byte 1 10) x)
@@ -193,9 +198,15 @@
                           (unsigned-byte 32))
                 render-opaque-monochromatic-quadrilateral))
 (defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
-  (declare (ignore gpu color v1 v2 v3 v4))
-  (format t "GP0(#x28): render-opaque-monochromatic-quadrilateral ~
-             is unimplemented!~%")
+  (declare (ignore gpu))
+  (setf *gpu-list*
+        (cons (list (word-to-position v1) (word-to-color color))
+              (cons (list (word-to-position v2) (word-to-color color))
+                    (cons (list (word-to-position v3) (word-to-color color))
+                          (cons (list (word-to-position v2) (word-to-color color))
+                                (cons (list (word-to-position v3) (word-to-color color))
+                                      (cons (list (word-to-position v4) (word-to-color color)) *gpu-list*)))))))
+  (incf *gpu-list-len* 6)
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -203,8 +214,9 @@
                 clear-texture-cache))
 (defun clear-texture-cache (gpu value)
   (declare (ignore gpu))
-  (format t "GP0(#x01): clear-texture-cache is unimplemented ~
-             (because texture cache is not implemented)!~%")
+  (when *debug-gpu*
+    (format t "GP0(#x01): clear-texture-cache is unimplemented ~
+             (because texture cache is not implemented)!~%"))
   value)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -221,8 +233,7 @@
     ; the remaining-image-words
     (progn
      (setf (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu)) 0)
-     (setf (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)) 1)
-     (setf (gp0-operation-arguments (gpu-gp0-op gpu)) (list)))
+     (setf (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)) 1))
     ; Setting this to 0 allows for the next word sent
     ; to GP0 to resume normally opcode decoding.
     (setf
@@ -236,7 +247,8 @@
                 load-image))
 (defun load-image (gpu command coordinates size)
   (declare (ignore command coordinates))
-  (format t "GP0(#xA0): load-image is not fully implemented!~%")
+  (when *debug-gpu*
+    (format t "GP0(#xA0): load-image is not fully implemented!~%"))
   (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))
         (* (ldb (byte 16 0) size) (ldb (byte 16 16) size)))
   (unless (zerop (mod (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
@@ -262,9 +274,13 @@
                 save-image))
 (defun save-image (gpu command coordinates size)
   (declare (ignore gpu command coordinates size))
-  (format t "GP0(#xC0): save-image-from-vram is unimplemented!~%")
+  (when *debug-gpu*
+    (format t "GP0(#xC0): save-image-from-vram is unimplemented!~%"))
   0)
 
+; TODO(Samantha): Move these into the gpu.
+(defparameter *gpu-list* (list))
+(defparameter *gpu-list-len* 0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32)
@@ -273,8 +289,15 @@
                           (unsigned-byte 32))
                 render-opaque-shaded-quadrilateral))
 (defun render-opaque-shaded-quadrilateral (gpu color1 v1 color2 v2 color3 v3 color4 v4)
-  (declare (ignore gpu color1 color2 color3 color4 v1 v2 v3 v4))
-  (format t "GP0(#x38): render-opaque-shaded-quadrilateral is unimplemented!~%")
+  (declare (ignore gpu))
+  (setf *gpu-list*
+        (cons (list (word-to-position v1) (word-to-color color1))
+              (cons (list (word-to-position v2) (word-to-color color2))
+                    (cons (list (word-to-position v3) (word-to-color color3))
+                          (cons (list (word-to-position v2) (word-to-color color2))
+                                (cons (list (word-to-position v3) (word-to-color color3))
+                                      (cons (list (word-to-position v4) (word-to-color color4)) *gpu-list*)))))))
+  (incf *gpu-list-len* 6)
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
@@ -289,11 +312,20 @@
                                                         v2 texture-coordinate2-and-texture-page
                                                         v3 texture-coordinate3
                                                         v4 texture-coordinate4)
-  (declare (ignore gpu color1 v1 texture-coordinate1-and-palette
-                   v2 texture-coordinate2-and-texture-page
-                   v3 texture-coordinate3 v4 texture-coordinate4))
-  (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
-             is unimplemented!~%")
+  (declare (ignore gpu color1 texture-coordinate1-and-palette
+                   texture-coordinate2-and-texture-page texture-coordinate3
+                   texture-coordinate4))
+  (setf *gpu-list*
+        (cons (list (word-to-position v1) (word-to-color #xFF))
+              (cons (list (word-to-position v2) (word-to-color #xFF))
+                    (cons (list (word-to-position v3) (word-to-color #xFF))
+                          (cons (list (word-to-position v2) (word-to-color #xFF))
+                                (cons (list (word-to-position v3) (word-to-color #xFF))
+                                      (cons (list (word-to-position v4) (word-to-color #xFF)) *gpu-list*)))))))
+  (incf *gpu-list-len* 6)
+  (when *debug-gpu*
+    (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
+             is not fully implemented!~%"))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
@@ -304,25 +336,30 @@
 (defun render-opaque-shaded-triangle (gpu color1 v1 color2 v2 color3 v3)
   (declare (ignore gpu))
   ; TODO(Samantha): We shouldn't really draw from here. We should accumulate all
-  ; of these vertices in a larger buffer and _then_ draw.
-  (draw (make-buffer-stream
-         (list
-          (make-gpu-array
-           (list (list (word-to-position v1) (word-to-color color1))
-                 (list (word-to-position v2) (word-to-color color2))
-                 (list (word-to-position v3) (word-to-color color3)))
-           :element-type 'our-vert))
-         :length 3))
+  ; of these vertices in a larger buffer and _then_ draw. Also, we're leaking
+  ; memory _all_ over the place.
+  (setf *gpu-list*
+        (cons (list (word-to-position v1) (word-to-color color1))
+              (cons (list (word-to-position v2) (word-to-color color2))
+                    (cons (list (word-to-position v3) (word-to-color color3)) *gpu-list*))))
+  (incf *gpu-list-len* 3)
   0)
 
 ; TODO(Samantha): These probably should be different types. Offload the type
 ; conversion to the shaders. Also, we should use the interal g-pc type.
 (defstruct-g our-vert
-  (position :vec4)
+  (position :vec2)
   (color :vec4))
 
-(defun-g vert-stage ((vert our-vert))
-  (values (our-vert-position vert) (our-vert-color vert)))
+(defun-g vert-stage ((vert our-vert) &uniform (offset :vec2))
+  (let ((pos (+ offset (our-vert-position vert))))
+    (values
+     (v!
+      (- (/ (aref pos 0) 512.0) 1)
+      (- 1 (/ (aref pos 1) 256.0))
+      0
+      1f0)
+     (our-vert-color vert))))
 
 (defun-g frag-stage ((color :vec4))
   color)
@@ -331,10 +368,22 @@
   :vertex (vert-stage our-vert)
   :fragment (frag-stage :vec4))
 
-(defun draw (vert-stream)
+(defun draw (gpu)
   (with-viewport *viewport*
-    (map-g #'some-pipeline vert-stream)
-    (swap)))
+    (clear)
+    (map-g #'some-pipeline (make-buffer-stream
+                            (make-gpu-array
+                             *gpu-list*
+                             :element-type 'our-vert)
+                            :length *gpu-list-len*
+                            :index-array (make-gpu-array
+                                          (loop for i from 0 to (- *gpu-list-len* 1) collect i)
+                                          :element-type :uint8)
+                            )
+           :offset (v! (gpu-drawing-offset-x gpu) (gpu-drawing-offset-y gpu)))
+    (swap)
+    (setf *gpu-list* (list))
+    (setf *gpu-list-len* 0)))
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
 (defun assign-new-gp0-op (gpu value)
@@ -343,7 +392,7 @@
     (case (ldb (byte 8 24) value)
       (#x00
         (setf required-arguments 1)
-        (setf operation (lambda (gpu &rest values) (declare (ignore gpu values)) 0)))
+        (setf operation (lambda (gpu value) (declare (ignore gpu value)) 0)))
       (#x30
         (setf required-arguments 6)
         (setf operation #'render-opaque-shaded-triangle))
@@ -393,9 +442,8 @@
            :required-number-of-arguments required-arguments
            :current-number-of-arguments 0
            :arguments (list)))
-    (setf (gp0-operation-arguments-tail (gpu-gp0-op gpu))
-          (gp0-operation-arguments (gpu-gp0-op gpu)))
-    (format t "GP0(#x~2,'0x)~%" value))
+    (when *debug-gpu*
+      (format t "GP0(#x~2,'0x)~%" value)))
   0)
 
 (declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-color))
@@ -408,11 +456,23 @@
 
 (declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-position))
 (defun word-to-position (word)
-  (v!
-   (- (/ (ldb (byte 16 0) word) 512.0) 1)
-   (- 1 (/ (ldb (byte 16 16) word) 256.0))
-   0
-   1f0))
+  (let (
+        ; (x (- (/ (float (if (ldb-test (byte 1 10) word)
+        ;            (* -1 (logand #x7FF (1+ (lognot (ldb (byte 11 0) word)))))
+        ;            (ldb (byte 11 0) word)))
+        ;          512.0)
+        ;       1))
+        ; (y (- 1 (/ (float (if (ldb-test (byte 1 26) word)
+        ;              (* -1 (logand #x7FF (1+ (lognot (ldb (byte 11 16) word)))))
+        ;              (ldb (byte 11 16) word)))
+        ;            256.0)))
+        )
+    ; (when (or (< x -1) (> x 1))
+    ;   (setf x (- x (truncate x 1))))
+    ; (when (or (< y -1) (> y 1))
+    ;   (setf y (- y (truncate y 1))))
+    ; (v! x y 0 1f0)
+    (v! (ldb (byte 16 0) word) (ldb (byte 16 16) word))))
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))
@@ -435,6 +495,7 @@
     (when (= (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu))
              (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)))
       (setf (gp0-operation-required-number-of-arguments gp0-op) 0)
+      ; (format t "Args are: (~{0x~8,'0x~^, ~})~%" (gp0-operation-arguments gp0-op))
       (apply (gp0-operation-function gp0-op)
         (cons gpu (gp0-operation-arguments gp0-op)))))
   0)
@@ -475,8 +536,9 @@
   (setf (gpu-gp0-op gpu)
         (make-gp0-operation :current-number-of-arguments 0
                             :required-number-of-arguments 0))
-  (format t "GP1(#x01) Is not yet implemented! ~
-             (Because the command buffer isn't implemented.)~%")
+  (when *debug-gpu*
+    (format t "GP1(#x01) Is not yet implemented! ~
+             (Because the command buffer isn't implemented.)~%"))
   0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) acknowledge-irq))
@@ -533,7 +595,8 @@
                           (unsigned-byte 32))
                 write-gp1))
 (defun write-gp1 (gpu value)
-  (format t "GP1(#x~2,'0x)~%" value)
+  (when *debug-gpu*
+    (format t "GP1(#x~2,'0x)~%" value))
   (case (ldb (byte 8 24) value)
     (#x00 (gpu-soft-reset gpu))
     (#x01 (reset-command-buffer gpu))
