@@ -7,9 +7,9 @@
                 ; overflow detection will just be wrong.
                 (to-signed-byte-32 (sign-extend immediate))
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))))
-    (when (> value #x7FFFFFFF)
-      (trigger-exception cpu :cause :arithmetic-overflow))
-    (set-register cpu target-register (wrap-word value))))
+    (if (> value #x7FFFFFFF)
+      (trigger-exception cpu :cause :arithmetic-overflow)
+      (set-register cpu target-register (wrap-word value)))))
 
 (def-i-type addiu #x09
   (set-register
@@ -138,12 +138,13 @@
        (setf (cpu-hi cpu)
              (wrap-word
               (mod
-               (aref (cpu-registers cpu) source-register)
-               (aref (cpu-registers cpu) target-register))))
+               (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
+               (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
        (setf (cpu-lo cpu)
-             (floor
-              (aref (cpu-registers cpu) source-register)
-              (aref (cpu-registers cpu) target-register)))))))
+             (wrap-word
+              (truncate
+               (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
+               (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))))))
 
 (def-r-type divu #xFF1B
   (if (zerop (aref (cpu-registers cpu) target-register))
@@ -165,9 +166,9 @@
   (let ((value (+
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
                 (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
-    (when (> value #x7FFFFFFF)
-      (trigger-exception cpu :cause :arithmetic-overflow))
-    (set-register cpu destination-register (wrap-word value))))
+    (if (> value #x7FFFFFFF)
+      (trigger-exception cpu :cause :arithmetic-overflow)
+      (set-register cpu destination-register (wrap-word value)))))
 
 (def-r-type addu #xFF21
   (set-register
@@ -183,9 +184,9 @@
             (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
     ; TODO(Samantha): Is this really doing what I think it's doing?
     ; TODO(Samantha): Figure out a testing framework for common lisp.
-    (when (< result #x-80000000)
-      (trigger-exception cpu :cause :arithmetic-overflow))
-    (set-register cpu destination-register (wrap-word result))))
+    (if (< result #x-80000000)
+      (trigger-exception cpu :cause :arithmetic-overflow)
+      (set-register cpu destination-register (wrap-word result)))))
 
 (def-r-type subu #xFF23
   (set-register
