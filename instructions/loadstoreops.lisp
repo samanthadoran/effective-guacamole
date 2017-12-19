@@ -180,9 +180,9 @@
           (+
            (sign-extend immediate)
            (aref (cpu-registers cpu) source-register)))))
-    (unless (is-cache-isolated cpu)
-      (if (/= 0 (mod address 4))
-        (trigger-exception cpu :cause :address-write-error)
+    (if (/= 0 (mod address 4))
+      (trigger-exception cpu :cause :address-write-error)
+      (unless (is-cache-isolated cpu)
         (write-cpu-word
          cpu
          address
