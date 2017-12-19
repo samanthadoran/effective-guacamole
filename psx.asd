@@ -7,6 +7,7 @@
                #:livesupport
                #:cepl.skitter.sdl2
                #:cepl.devil)
+  :serial t
   :components (
                (:file "memory-constants")
                (:file "cop0")

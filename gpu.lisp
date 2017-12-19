@@ -78,14 +78,26 @@
 
 ; TODO(Samantha): word-to-gpu-stat function.
 
-; TODO(Samantha): The function slot of this struct causes all kinds of weird
-; problems for sbcl because functions with &rest arguments are never subtypes
-; of themselves. This causes compile failures for asdf if `:force t` and
-; requires either more than one compile without or choosiing to continue with
-; the newly defined slot type from the sbcl backtrace. Just remove the type?
 (defstruct gp0-operation
   (function (lambda (gpu &rest values) (declare (ignore gpu values)) 0)
-            :type (function (gpu &rest (unsigned-byte 32)) (unsigned-byte 32)))
+            ; TODO(Samantha): Try to fix this to have it look a bit less hacky?
+            ; Although you could just use an &rest argument to consolidate the
+            ; twelve possible arguments of this slot, in practice, sbcl will
+            ; cause compile failures whenever this file changes due to functions
+            ; with &rest not being subtypes of one another. So, until another
+            ; workaround can be found that doesn't involve compiling twice and
+            ; making sure :force is nil, use the optional.
+            :type (function (gpu &optional
+                                 ; These 12 possible arguments represent the max
+                                 ; number of arguments a gp0 operation could
+                                 ; ever have which is in the case of GP0(#x3E).
+                                 (unsigned-byte 32) (unsigned-byte 32)
+                                 (unsigned-byte 32) (unsigned-byte 32)
+                                 (unsigned-byte 32) (unsigned-byte 32)
+                                 (unsigned-byte 32) (unsigned-byte 32)
+                                 (unsigned-byte 32) (unsigned-byte 32)
+                                 (unsigned-byte 32) (unsigned-byte 32))
+                            (unsigned-byte 32)))
   (required-number-of-arguments 0 :type (unsigned-byte 8))
   (current-number-of-arguments 0 :type (unsigned-byte 8))
   (remaining-image-words 0 :type (unsigned-byte 32))
@@ -120,6 +132,10 @@
   (display-start-y 0 :type (unsigned-byte 10))
   (display-end-y 0 :type (unsigned-byte 10))
   (gp0-op (make-gp0-operation) :type gp0-operation))
+
+; TODO(Samantha): Move these into the gpu.
+(defparameter *gpu-list* (list))
+(defparameter *gpu-list-len* 0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -277,10 +293,6 @@
   (when *debug-gpu*
     (format t "GP0(#xC0): save-image-from-vram is unimplemented!~%"))
   0)
-
-; TODO(Samantha): Move these into the gpu.
-(defparameter *gpu-list* (list))
-(defparameter *gpu-list-len* 0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32)
