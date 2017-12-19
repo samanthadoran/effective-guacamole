@@ -113,47 +113,10 @@
   (setf (aref (cpu-delay-registers cpu) index) value)
   (setf (aref (cpu-delay-registers cpu) 0) 0))
 
-; TODO(Samantha): These six functions should really be wrapped into the mmu.
-(declaim (ftype (function (cpu (unsigned-byte 32))
-                          (unsigned-byte 8))
-                read-cpu-byte))
-(defun read-cpu-byte (cpu address)
-  (funcall (cpu-memory-get-byte cpu) address))
-
-(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 8))
-                          (unsigned-byte 8))
-                write-cpu-byte))
-(defun write-cpu-byte (cpu address value)
-  (funcall (cpu-memory-set-byte cpu) address value))
-
-(declaim (ftype (function (cpu (unsigned-byte 32))
-                          (unsigned-byte 16))
-                read-cpu-half-word))
-(defun read-cpu-half-word (cpu address)
-  (funcall (cpu-memory-get-half-word cpu) address))
-
-(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 16))
-                          (unsigned-byte 16))
-                write-cpu-half-word))
-(defun write-cpu-half-word (cpu address value)
-  (funcall (cpu-memory-set-half-word cpu) address value))
-
-(declaim (ftype (function (cpu (unsigned-byte 32))
-                          (unsigned-byte 32))
-                read-cpu-word))
-(defun read-cpu-word (cpu address)
-  (funcall (cpu-memory-get-word cpu) address))
-
-(declaim (ftype (function (cpu (unsigned-byte 32) (unsigned-byte 32))
-                          (unsigned-byte 32))
-                write-cpu-word))
-(defun write-cpu-word (cpu address value)
-  (funcall (cpu-memory-set-word cpu) address value))
-
 (declaim (ftype (function (cpu) (unsigned-byte 32)) fetch))
 (defun fetch (cpu)
   "Retrieves an instruction for execution as a 32 bit word."
-  (read-cpu-word cpu (cpu-program-counter cpu)))
+  (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu)))
 
 (declaim (ftype (function ((unsigned-byte 32))
                           (unsigned-byte 32))
@@ -210,6 +173,7 @@
      :shift-amount (ldb (byte 5 6) instruction-as-word)
      :secondary-operation-code (ldb (byte 6 0) instruction-as-word))))
 
+; TODO(Samantha): This needs special care when happening in a branch delay slot.
 (declaim (ftype (function (cpu &key (:cause keyword))
                           (unsigned-byte 32))
                 trigger-exception))

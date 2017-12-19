@@ -13,12 +13,11 @@
   (setf
    (cpu-pending-load-value cpu)
    (sign-extend-byte
-    (read-cpu-byte
-     cpu
-     (wrap-word
-      (+
-       (sign-extend immediate)
-       (aref (cpu-registers cpu) source-register)))))))
+    (funcall (cpu-memory-get-byte cpu)
+             (wrap-word
+              (+
+               (sign-extend immediate)
+               (aref (cpu-registers cpu) source-register)))))))
 
 (def-i-type lh #x21
   (let ((address
@@ -32,7 +31,7 @@
        (setf (cpu-pending-load-register cpu) target-register)
        (setf
         (cpu-pending-load-value cpu)
-        (sign-extend (read-cpu-half-word cpu address)))))))
+        (sign-extend (funcall (cpu-memory-get-half-word cpu) address)))))))
 
 ; TODO(Samantha): Shouldn't this and lwr be cache conscious?
 ; LWL and LWR are both meant to be executed in sequence, it wouldn't make sense
@@ -44,7 +43,7 @@
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
-         (aligned-word (read-cpu-word cpu aligned-address))
+         (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
     (set-register cpu target-register
                   (case (ldb (byte 2 0) address)
@@ -74,17 +73,16 @@
        (setf (cpu-pending-load-register cpu) target-register)
        (setf
         (cpu-pending-load-value cpu)
-        (read-cpu-word cpu address))))))
+        (funcall (cpu-memory-get-word cpu) address))))))
 
 (def-i-type lbu #x24
   (setf (cpu-pending-load-register cpu) target-register)
   (setf (cpu-pending-load-value cpu)
-        (read-cpu-byte
-         cpu
-         (wrap-word
-          (+
-           (sign-extend immediate)
-           (aref (cpu-registers cpu) source-register))))))
+        (funcall (cpu-memory-get-byte cpu)
+                 (wrap-word
+                  (+
+                   (sign-extend immediate)
+                   (aref (cpu-registers cpu) source-register))))))
 
 (def-i-type lhu #x25
   (let ((address
@@ -98,7 +96,7 @@
        (setf (cpu-pending-load-register cpu) target-register)
        (setf
         (cpu-pending-load-value cpu)
-        (read-cpu-half-word cpu address))))))
+        (funcall (cpu-memory-get-half-word cpu) address))))))
 
 (def-i-type lwr #x26
   (let* ((address
@@ -107,7 +105,7 @@
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
-         (aligned-word (read-cpu-word cpu aligned-address))
+         (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
     (set-register cpu target-register
                   (case (ldb (byte 2 0) address)
@@ -127,13 +125,12 @@
 
 (def-i-type sb #x28
   (unless (is-cache-isolated cpu)
-    (write-cpu-byte
-     cpu
-     (wrap-word
-      (+
-       (sign-extend immediate)
-       (aref (cpu-registers cpu) source-register)))
-     (ldb (byte 8 0) (aref (cpu-registers cpu) target-register)))))
+    (funcall (cpu-memory-set-byte cpu)
+             (wrap-word
+              (+
+               (sign-extend immediate)
+               (aref (cpu-registers cpu) source-register)))
+             (ldb (byte 8 0) (aref (cpu-registers cpu) target-register)))))
 
 (def-i-type sh #x29
   (let ((address
@@ -144,10 +141,9 @@
     (if (/= 0 (mod address 2))
       (trigger-exception cpu :cause :address-write-error)
       (unless (is-cache-isolated cpu)
-        (write-cpu-half-word
-         cpu
-         address
-         (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))))
+        (funcall (cpu-memory-set-half-word cpu)
+                 address
+                 (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))))
 
 (def-i-type swl #x2A
   (let* ((address
@@ -156,23 +152,24 @@
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
-         (aligned-word (read-cpu-word cpu aligned-address))
+         (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
-    (write-cpu-word cpu aligned-address
-                    (case (ldb (byte 2 0) address)
-                      (0 (logior
-                          (logand aligned-word #xFFFFFF00)
-                          (wrap-word (ash value 24))))
-                      (1 (logior
-                          (logand aligned-word #xFFFF0000)
-                          (wrap-word (ash value 16))))
-                      (2 (logior
-                          (logand aligned-word #xFF000000)
-                          (wrap-word (ash value 8))))
-                      (3 (logior
-                          (logand aligned-word #x00000000)
-                          (wrap-word (ash value 0))))
-                      (otherwise (error "Unreachable.~%"))))))
+    (funcall (cpu-memory-set-word cpu)
+             aligned-address
+             (case (ldb (byte 2 0) address)
+               (0 (logior
+                   (logand aligned-word #xFFFFFF00)
+                   (wrap-word (ash value 24))))
+               (1 (logior
+                   (logand aligned-word #xFFFF0000)
+                   (wrap-word (ash value 16))))
+               (2 (logior
+                   (logand aligned-word #xFF000000)
+                   (wrap-word (ash value 8))))
+               (3 (logior
+                   (logand aligned-word #x00000000)
+                   (wrap-word (ash value 0))))
+               (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type sw #x2B
   (let ((address
@@ -183,10 +180,9 @@
     (if (/= 0 (mod address 4))
       (trigger-exception cpu :cause :address-write-error)
       (unless (is-cache-isolated cpu)
-        (write-cpu-word
-         cpu
-         address
-         (aref (cpu-registers cpu) target-register))))))
+        (funcall (cpu-memory-set-word cpu)
+                 address
+                 (aref (cpu-registers cpu) target-register))))))
 
 (def-i-type swr #x2E
   (let* ((address
@@ -195,23 +191,24 @@
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
          (aligned-address (logand address #xFFFFFF00))
-         (aligned-word (read-cpu-word cpu aligned-address))
+         (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
-    (write-cpu-word cpu aligned-address
-                    (case (ldb (byte 2 0) address)
-                      (0 (logior
-                          (logand aligned-word #x00000000)
-                          (wrap-word (ash value 0))))
-                      (1 (logior
-                          (logand aligned-word #x000000FF)
-                          (wrap-word (ash value 8))))
-                      (2 (logior
-                          (logand aligned-word #x0000FFFF)
-                          (wrap-word (ash value 16))))
-                      (3 (logior
-                          (logand aligned-word #x00FFFFFF)
-                          (wrap-word (ash value 24))))
-                      (otherwise (error "Unreachable.~%"))))))
+    (funcall (cpu-memory-set-word cpu)
+             aligned-address
+             (case (ldb (byte 2 0) address)
+               (0 (logior
+                   (logand aligned-word #x00000000)
+                   (wrap-word (ash value 0))))
+               (1 (logior
+                   (logand aligned-word #x000000FF)
+                   (wrap-word (ash value 8))))
+               (2 (logior
+                   (logand aligned-word #x0000FFFF)
+                   (wrap-word (ash value 16))))
+               (3 (logior
+                   (logand aligned-word #x00FFFFFF)
+                   (wrap-word (ash value 24))))
+               (otherwise (error "Unreachable.~%"))))))
 
 ; TODO(Samantha): CPU in lwc2 and swc2 is only referenced to quash a warning,
 ; implement them so we can remove this ugly hack.

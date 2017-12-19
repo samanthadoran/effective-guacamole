@@ -1,7 +1,8 @@
 (defpackage #:psx-console
   (:nicknames #:psx)
   (:use :cl :psx-cpu :memory)
-  (:export #:make-psx #:load-rom-from-file #:console-on #:make-console))
+  (:export #:make-psx #:load-rom-from-file #:console-on #:make-console
+           #:setup-and-run))
 
 (in-package :psx-console)
 (declaim (optimize (speed 3) (safety 1)))
@@ -43,3 +44,9 @@
   (let ((my-psx (make-psx)))
     (console-on my-psx bios-rom-path)
     my-psx))
+
+(declaim (ftype (function (pathname) (unsigned-byte 32)) setup-and-run))
+(defun setup-and-run (bios-rom-path)
+  (let ((psx (make-console bios-rom-path)))
+    (loop do (step-cpu (psx-cpu psx))))
+  0)
