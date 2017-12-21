@@ -95,17 +95,6 @@
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) 4))))
 
-(declaim (ftype (function (instruction) string) instruction-information))
-(defun instruction-information (instruction)
-  "Returns a pretty formatted representation of any given instruction."
-  ; TODO(Samantha): Add a line with disassembly.
-  (format nil "~A (0x~8,'0X) at 0x~8,'0X (segment: ~A)~%Masked opcode is 0x~5,'0X~%"
-          (instruction-mnemonic instruction)
-          (instruction-word instruction)
-          (instruction-address instruction)
-          (instruction-segment instruction)
-          (instruction-masked-opcode instruction)))
-
 (declaim (ftype (function (cpu (unsigned-byte 5) (unsigned-byte 32))
                           (unsigned-byte 32))
         set-register))
@@ -219,8 +208,6 @@
   (set-register cpu (cpu-pending-load-register cpu) (cpu-pending-load-value cpu))
   (setf (cpu-pending-load-register cpu) 0)
   (setf (cpu-pending-load-value cpu) 0)
-  (when *debug-cpu*
-    (format t "~A~%" (instruction-information instruction)))
   (if (/= 0 (mod (cpu-current-program-counter cpu) 4))
     (trigger-exception cpu :cause :address-load-error)
     (funcall (instruction-operation instruction) cpu instruction))

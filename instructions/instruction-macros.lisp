@@ -21,6 +21,14 @@
            (target-register (instruction-target-register instruction))
            (immediate (instruction-immediate-value instruction)))
        (declare (ignorable source-register target-register immediate))
+       (when *debug-cpu*
+         (format t "#x~8,'0x(~A): ~A $~D $~D #x~4,'0x~%"
+                 (instruction-address instruction)
+                 (instruction-segment instruction)
+                 (instruction-mnemonic instruction)
+                 target-register
+                 source-register
+                 immediate))
        ,@body)))
 
 (defmacro def-j-type (name opcode &body body)
@@ -29,6 +37,12 @@
     ,opcode
     (let ((jump-target (instruction-jump-target instruction)))
       (declare (ignorable jump-target))
+      (when *debug-cpu*
+        (format t "#x~8,'0x(~A): ~A #x~6,'0x~%"
+                (instruction-address instruction)
+                (instruction-segment instruction)
+                (instruction-mnemonic instruction)
+                jump-target))
       ,@body)))
 
 (defmacro def-r-type (name opcode &body body)
@@ -41,4 +55,12 @@
            (shift-amount (instruction-shift-amount instruction)))
        (declare (ignorable source-register target-register
                            destination-register shift-amount))
+       (when *debug-cpu*
+         (format t "#x~8,'0x(~A): ~A $~D $~D $~D~%"
+                 (instruction-address instruction)
+                 (instruction-segment instruction)
+                 (instruction-mnemonic instruction)
+                 destination-register
+                 source-register
+                 target-register))
        ,@body)))
