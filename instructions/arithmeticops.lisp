@@ -7,7 +7,7 @@
                 ; overflow detection will just be wrong.
                 (to-signed-byte-32 (sign-extend immediate))
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))))
-    (if (> value #x7FFFFFFF)
+    (if (or (< value #x-80000000) (> value #x7FFFFFFF))
       (trigger-exception cpu :cause :arithmetic-overflow)
       (set-register cpu target-register (wrap-word value)))))
 
@@ -114,59 +114,44 @@
     (setf (cpu-hi cpu) (ldb (byte 32 32) result))))
 
 (def-r-type div #xFF1A
-  (if (zerop (aref (cpu-registers cpu) target-register))
-    ; Division by zero is not an exception, it's just the max/min value
-    (progn
-     (setf (cpu-hi cpu)
-           (wrap-word
-            (to-signed-byte-32 (aref (cpu-registers cpu) source-register))))
-     ; The sign of the result changes depending on the sign of the dividend
-     (setf (cpu-lo cpu)
-           (wrap-word
-            (if (>= (aref (cpu-registers cpu) source-register) 0)
-              #x7FFFFFFF
-              #x-80000000))))
-    (if (and
-         (= (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) -1)
-         (= (aref (cpu-registers cpu) target-register) #x80000000))
-      ; The minimum value we can store in (signed-byte 32) is #x-7FFFFFFF. Once
-      ; again, this isn't an exception, it just puts specific values in hi and lo.
+  (let ((numerator (to-signed-byte-32 (aref (cpu-registers cpu) source-register)))
+        (denominator (to-signed-byte-32 (aref (cpu-registers cpu) target-register))))
+    (if (zerop denominator)
+      ; Division by zero is not an exception, it's just the max/min value
       (progn
-       (setf (cpu-hi cpu) 0)
-       (setf (cpu-lo cpu) #x80000000))
-      (progn
-       (setf (cpu-hi cpu)
-             (wrap-word
-              (mod
-               (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
-               (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
+       (setf (cpu-hi cpu) (wrap-word numerator))
        (setf (cpu-lo cpu)
-             (wrap-word
-              (truncate
-               (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
-               (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))))))
+             (if (>= numerator 0)
+               #xFFFFFFFF
+               #x1)))
+      (if (and (= denominator -1) (= (wrap-word numerator) #x80000000))
+        ; This would overflow and causes a bogus value.
+        (progn
+         (setf (cpu-hi cpu) 0)
+         (setf (cpu-lo cpu) #x80000000))
+        (progn
+         ; TODO(Samantha): I'm not entirely certain the mod is working how I'm
+         ; expecting it to. Study how psx handles mod with combinations of
+         ; negative numerators and denominators. For now, just use rem.
+         (setf (cpu-hi cpu) (wrap-word (rem numerator denominator)))
+         (setf (cpu-lo cpu) (wrap-word (truncate numerator denominator))))))))
 
 (def-r-type divu #xFF1B
-  (if (zerop (aref (cpu-registers cpu) target-register))
-    ; Division by zero is not an exception, it's just the max value
-    (progn
-     (setf (cpu-hi cpu) (aref (cpu-registers cpu) source-register))
-     (setf (cpu-lo cpu) #xFFFFFFFF))
-    (progn
-     (setf (cpu-hi cpu)
-           (mod
-            (aref (cpu-registers cpu) source-register)
-            (aref (cpu-registers cpu) target-register)))
-     (setf (cpu-lo cpu)
-           (floor
-            (aref (cpu-registers cpu) source-register)
-            (aref (cpu-registers cpu) target-register))))))
+  (let ((numerator (aref (cpu-registers cpu) source-register))
+        (denominator (aref (cpu-registers cpu) target-register)))
+    (if (zerop denominator)
+      (progn
+       (setf (cpu-hi cpu) numerator)
+       (setf (cpu-lo cpu) #xFFFFFFFF))
+      (progn
+       (setf (cpu-hi cpu) (mod numerator denominator))
+       (setf (cpu-lo cpu) (floor numerator denominator))))))
 
 (def-r-type add #xFF20
   (let ((value (+
                 (to-signed-byte-32 (aref (cpu-registers cpu) source-register))
                 (to-signed-byte-32 (aref (cpu-registers cpu) target-register)))))
-    (if (> value #x7FFFFFFF)
+    (if (or (< value #x-80000000) (> value #x7FFFFFFF))
       (trigger-exception cpu :cause :arithmetic-overflow)
       (set-register cpu destination-register (wrap-word value)))))
 

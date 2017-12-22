@@ -42,10 +42,11 @@
            (+
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFF00))
+         (aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
-    (set-register cpu target-register
+    (setf (cpu-pending-load-register cpu) target-register)
+    (setf (cpu-pending-load-value cpu)
                   (case (ldb (byte 2 0) address)
                     (0 (logior
                         (logand current-value #x00FFFFFF)
@@ -104,10 +105,11 @@
            (+
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFF00))
+         (aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
-    (set-register cpu target-register
+    (setf (cpu-pending-load-register cpu) target-register)
+    (setf (cpu-pending-load-value cpu)
                   (case (ldb (byte 2 0) address)
                     (0 (logior
                         (logand current-value #x00000000)
@@ -151,25 +153,26 @@
            (+
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFF00))
+         (aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
-    (funcall (cpu-memory-set-word cpu)
-             aligned-address
-             (case (ldb (byte 2 0) address)
-               (0 (logior
-                   (logand aligned-word #xFFFFFF00)
-                   (wrap-word (ash value 24))))
-               (1 (logior
-                   (logand aligned-word #xFFFF0000)
-                   (wrap-word (ash value 16))))
-               (2 (logior
-                   (logand aligned-word #xFF000000)
-                   (wrap-word (ash value 8))))
-               (3 (logior
-                   (logand aligned-word #x00000000)
-                   (wrap-word (ash value 0))))
-               (otherwise (error "Unreachable.~%"))))))
+    (unless (is-cache-isolated cpu)
+      (funcall (cpu-memory-set-word cpu)
+               aligned-address
+               (case (ldb (byte 2 0) address)
+                 (0 (logior
+                     (logand aligned-word #xFFFFFF00)
+                     (wrap-word (ash value -24))))
+                 (1 (logior
+                     (logand aligned-word #xFFFF0000)
+                     (wrap-word (ash value -16))))
+                 (2 (logior
+                     (logand aligned-word #xFF000000)
+                     (wrap-word (ash value -8))))
+                 (3 (logior
+                     (logand aligned-word #x00000000)
+                     (wrap-word (ash value 0))))
+                 (otherwise (error "Unreachable.~%")))))))
 
 (def-i-type sw #x2B
   (let ((address
@@ -190,25 +193,26 @@
            (+
             (aref (cpu-registers cpu) source-register)
             (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFF00))
+         (aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
-    (funcall (cpu-memory-set-word cpu)
-             aligned-address
-             (case (ldb (byte 2 0) address)
-               (0 (logior
-                   (logand aligned-word #x00000000)
-                   (wrap-word (ash value 0))))
-               (1 (logior
-                   (logand aligned-word #x000000FF)
-                   (wrap-word (ash value 8))))
-               (2 (logior
-                   (logand aligned-word #x0000FFFF)
-                   (wrap-word (ash value 16))))
-               (3 (logior
-                   (logand aligned-word #x00FFFFFF)
-                   (wrap-word (ash value 24))))
-               (otherwise (error "Unreachable.~%"))))))
+    (unless (is-cache-isolated cpu)
+      (funcall (cpu-memory-set-word cpu)
+               aligned-address
+               (case (ldb (byte 2 0) address)
+                 (0 (logior
+                     (logand aligned-word #x00000000)
+                     (wrap-word (ash value 0))))
+                 (1 (logior
+                     (logand aligned-word #x000000FF)
+                     (wrap-word (ash value 8))))
+                 (2 (logior
+                     (logand aligned-word #x0000FFFF)
+                     (wrap-word (ash value 16))))
+                 (3 (logior
+                     (logand aligned-word #x00FFFFFF)
+                     (wrap-word (ash value 24))))
+                 (otherwise (error "Unreachable.~%")))))))
 
 ; TODO(Samantha): CPU in lwc2 and swc2 is only referenced to quash a warning,
 ; implement them so we can remove this ugly hack.
