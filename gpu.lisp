@@ -217,14 +217,13 @@
 (defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
   (declare (ignore gpu))
   ; TODO(Samantha): Use an index-array instead of copying vertices.
-  (setf *gpu-list*
-        (cons (list (word-to-position v3) (word-to-color color)) ; 4 640x480 1 0x0
-              (cons (list (word-to-position v2) (word-to-color color)) ; 3 0x480 3 0x480
-                    (cons (list (word-to-position v1) (word-to-color color)) ; 1 0x0
-                          (cons (list (word-to-position v2) (word-to-color color))
-                                (cons (list (word-to-position v3) (word-to-color color))
-                                      (cons (list (word-to-position v4) (word-to-color color))
-                                            *gpu-list*)))))))
+  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color color))
+                          (list (word-to-position v2) (word-to-color color))
+                          (list (word-to-position v1) (word-to-color color))
+                          (list (word-to-position v2) (word-to-color color))
+                          (list (word-to-position v3) (word-to-color color))
+                          (list (word-to-position v4) (word-to-color color))
+                          *gpu-list*))
   (incf *gpu-list-len* 6)
   0)
 
@@ -305,13 +304,13 @@
                 render-opaque-shaded-quadrilateral))
 (defun render-opaque-shaded-quadrilateral (gpu color1 v1 color2 v2 color3 v3 color4 v4)
   (declare (ignore gpu))
-  (setf *gpu-list*
-        (cons (list (word-to-position v3) (word-to-color color3))
-              (cons (list (word-to-position v2) (word-to-color color2))
-                    (cons (list (word-to-position v1) (word-to-color color1))
-                          (cons (list (word-to-position v2) (word-to-color color2))
-                                (cons (list (word-to-position v3) (word-to-color color3))
-                                      (cons (list (word-to-position v4) (word-to-color color4)) *gpu-list*)))))))
+  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color color3))
+                          (list (word-to-position v2) (word-to-color color2))
+                          (list (word-to-position v1) (word-to-color color1))
+                          (list (word-to-position v2) (word-to-color color2))
+                          (list (word-to-position v3) (word-to-color color3))
+                          (list (word-to-position v4) (word-to-color color4))
+                          *gpu-list*))
   (incf *gpu-list-len* 6)
   0)
 
@@ -330,13 +329,13 @@
   (declare (ignore gpu color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
-  (setf *gpu-list*
-        (cons (list (word-to-position v3) (word-to-color #xFF))
-              (cons (list (word-to-position v2) (word-to-color #xFF))
-                    (cons (list (word-to-position v1) (word-to-color #xFF))
-                          (cons (list (word-to-position v2) (word-to-color #xFF))
-                                (cons (list (word-to-position v3) (word-to-color #xFF))
-                                      (cons (list (word-to-position v4) (word-to-color #xFF)) *gpu-list*)))))))
+  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color #xFF))
+                          (list (word-to-position v2) (word-to-color #xFF))
+                          (list (word-to-position v1) (word-to-color #xFF))
+                          (list (word-to-position v2) (word-to-color #xFF))
+                          (list (word-to-position v3) (word-to-color #xFF))
+                          (list (word-to-position v4) (word-to-color #xFF))
+                          *gpu-list*))
   (incf *gpu-list-len* 6)
   (when *debug-gpu*
     (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
@@ -354,13 +353,13 @@
   ; order it so desires. Until a more elegant fix can be figured out, just
   ; render both faces so that it's visible no matter what. Does this mean the
   ; quads might need 12 vertices..?
-  (setf *gpu-list*
-        (cons (list (word-to-position v1) (word-to-color color1))
-              (cons (list (word-to-position v2) (word-to-color color2))
-                    (cons (list (word-to-position v3) (word-to-color color3))
-                          (cons (list (word-to-position v3) (word-to-color color3))
-                                (cons (list (word-to-position v2) (word-to-color color2))
-                                      (cons (list (word-to-position v1) (word-to-color color1)) *gpu-list*)))))))
+  (setf *gpu-list* (list* (list (word-to-position v1) (word-to-color color1))
+                          (list (word-to-position v2) (word-to-color color2))
+                          (list (word-to-position v3) (word-to-color color3))
+                          (list (word-to-position v3) (word-to-color color3))
+                          (list (word-to-position v2) (word-to-color color2))
+                          (list (word-to-position v1) (word-to-color color1))
+                          *gpu-list*))
   (incf *gpu-list-len* 6)
   0)
 
@@ -368,7 +367,7 @@
 ; conversion to the shaders. Also, we should use the interal g-pc type.
 (defstruct-g our-vert
   (position :vec2)
-  (color :vec4))
+  (color :vec3))
 
 (defun-g vert-stage ((vert our-vert) &uniform (offset :vec2))
   (let ((pos (+ offset (our-vert-position vert))))
@@ -380,12 +379,15 @@
       1f0)
      (our-vert-color vert))))
 
-(defun-g frag-stage ((color :vec4))
-  color)
+(defun-g frag-stage ((color :vec3))
+  (v! (/ (aref color 0) 255.0)
+      (/ (aref color 1) 255.0)
+      (/ (aref color 2) 255.0)
+      0))
 
 (def-g-> some-pipeline ()
   :vertex (vert-stage our-vert)
-  :fragment (frag-stage :vec4))
+  :fragment (frag-stage :vec3))
 
 (defun draw (gpu)
   (with-viewport *viewport*
@@ -468,10 +470,9 @@
 (declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-color))
 (defun word-to-color (word)
   (v!
-   (/ (ldb (byte 8 0) word) 255.0)
-   (/ (ldb (byte 8 8) word) 255.0)
-   (/ (ldb (byte 8 16) word) 255.0)
-   0f0))
+   (ldb (byte 8 0) word)
+   (ldb (byte 8 8) word)
+   (ldb (byte 8 16) word)))
 
 (declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-position))
 (defun word-to-position (word)
@@ -498,7 +499,7 @@
       (progn
        (incf (gp0-operation-current-number-of-arguments gp0-op))
        (setf (cdr (gp0-operation-arguments-tail gp0-op))
-             (cons value nil))
+             (list value))
        (setf (gp0-operation-arguments-tail gp0-op)
              (cdr (gp0-operation-arguments-tail gp0-op)))))
     (when (= (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu))
