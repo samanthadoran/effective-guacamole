@@ -30,7 +30,12 @@
    :step (if (ldb-test (byte 1 1) word) -4 4)
    ; Bits [7:2] are unused, according to nocash.
    :chopping (ldb-test (byte 1 8) word)
-   :sync-mode (case (ldb (byte 2 9) word) (0 :manual) (1 :request) (2 :linked-list) (otherwise (error "Reserved DMA sync-mode!~%")))
+   :sync-mode
+   (case (ldb (byte 2 9) word)
+     (0 :manual)
+     (1 :request)
+     (2 :linked-list)
+     (otherwise (error "Reserved DMA sync-mode!~%")))
    ; Bits [15:11] are unused.
    :dma-chop-size (expt 2 (ldb (byte 3 16) word))
    ; Bit 19 is unused.
@@ -48,7 +53,12 @@
    (if (eql (channel-control-direction channel-control) :from-ram) 1 0)
    (ash (if (= (channel-control-step channel-control) -4) 1 0) 1)
    (ash (if (channel-control-chopping channel-control) 1 0) 8)
-   (ash (case (channel-control-sync-mode channel-control) (:manual 0) (:request 1) (:linked-list 2) (otherwise (error "Reserved DMA sync-mode!~%"))) 9)
+   (ash (case (channel-control-sync-mode channel-control)
+          (:manual 0)
+          (:request 1)
+          (:linked-list 2)
+          (otherwise (error "Reserved DMA sync-mode!~%")))
+        9)
    (ash (channel-control-dma-chop-size channel-control) 16)
    (ash (channel-control-cpu-chop-size channel-control) 20)
    (ash (if (channel-control-enable channel-control) 1 0) 24)
@@ -77,7 +87,8 @@
   (setf (channel-control-trigger (channel-channel-control channel)) nil)
   (values))
 
-(declaim (ftype (function (channel) (unsigned-byte 32)) get-channel-block-control))
+(declaim (ftype (function (channel) (unsigned-byte 32))
+                get-channel-block-control))
 (defun get-channel-block-control (channel)
   (logior (channel-block-size channel) (ash (channel-block-count channel) 16)))
 
@@ -126,10 +137,11 @@
    :irq-channel-enable (ldb (byte 7 16) word)
    :irq-enable (ldb-test (byte 1 23) word)
    ; The flags reset if written to.
-   :irq-channel-flags (ldb (byte 7 0)
-                           (logand
-                            (lognot (ldb (byte 7 24) word))
-                            (interrupt-register-irq-channel-flags interrupt-register)))))
+   :irq-channel-flags
+   (ldb (byte 7 0)
+        (logand
+         (lognot (ldb (byte 7 24) word))
+         (interrupt-register-irq-channel-flags interrupt-register)))))
 
 (defstruct dma
   (write
@@ -163,8 +175,12 @@
       (case (ldb (byte 4 0) offset)
         (0 (setf (channel-base channel) (ldb (byte 24 0) value)))
         (4 (set-channel-block-control channel value) value)
-        (8 (setf (channel-channel-control channel) (word-to-channel-control value)) value)
-        (otherwise (error "Unhandle dma write of 0x~8,'0x at offset 0x~8,'0x~%" value offset)))
+        (8 (setf (channel-channel-control channel)
+                 (word-to-channel-control value))
+           value)
+        (otherwise
+         (error "Unhandle dma write of 0x~8,'0x at offset 0x~8,'0x~%"
+                value offset)))
       (when (active channel)
         (run-dma dma channel))
       value)
@@ -175,7 +191,9 @@
              (dma-interrupt-register dma)
              (word-to-interrupt-register (dma-interrupt-register dma) value))
         value)
-      (otherwise (error "Unhandle dma write of 0x~8,'0x at offset 0x~8,'0x~%" value offset)))))
+      (otherwise
+       (error "Unhandle dma write of 0x~8,'0x at offset 0x~8,'0x~%"
+              value offset)))))
 
 (declaim (ftype (function (dma (unsigned-byte 8)) (unsigned-byte 32))
                 get-register))
@@ -218,29 +236,32 @@
   (let ((remaining (transfer-size channel))
         (channel-control (channel-channel-control channel))
         (base (channel-base channel)))
-    (loop for i from remaining downto 1 do
-      (progn
-       (case (channel-control-direction channel-control)
-         (:from-ram
-          (case (channel-port channel)
-            (:gpu
-             (funcall (dma-write dma) +gpu-registers-begin+ (funcall (dma-read dma) (logand base #x1FFFFC))))
-            (otherwise (error "Unhandled DMA channel ~A~%" (channel-port channel)))))
-         (:to-ram
-          (case (channel-port channel)
-            (:otc
-             (funcall (dma-write dma) (logand base #x1FFFFC)
-                      (if (= i 1)
-                        ; End of Table
-                        #xFFFFFF
-                        ; Previous link
-                        (ldb (byte 21 0) (wrap-word (- base 4))))))
-            (otherwise (error "Unhandled DMA channel ~A~%" (channel-port channel)))))
-         (otherwise (error "Invalid DMA direction ~A~%" (channel-control-direction channel-control))))
-       (setf
-        base
-        (wrap-word
-         (+ base (channel-control-step channel-control)))))))
+    (loop for i from remaining downto 1
+      do (case (channel-control-direction channel-control)
+           (:from-ram
+            (case (channel-port channel)
+              (:gpu
+               (funcall (dma-write dma)
+                        +gpu-registers-begin+
+                        (funcall (dma-read dma) (logand base #x1FFFFC))))
+              (otherwise
+               (error "Unhandled DMA channel ~A~%" (channel-port channel)))))
+           (:to-ram
+            (case (channel-port channel)
+              (:otc
+               (funcall (dma-write dma) (logand base #x1FFFFC)
+                        (if (= i 1)
+                          ; End of Table
+                          #xFFFFFF
+                          ; Previous link
+                          (ldb (byte 21 0) (wrap-word (- base 4))))))
+              (otherwise
+               (error "Unhandled DMA channel ~A~%" (channel-port channel)))))
+           (otherwise
+            (error "Invalid DMA direction ~A~%"
+                   (channel-control-direction channel-control))))
+      do (setf base
+               (wrap-word (+ base (channel-control-step channel-control))))))
   (complete channel))
 
 (declaim (ftype (function (dma channel)) run-dma-linked-list))
@@ -256,10 +277,11 @@
         (loop for i from (ldb (byte 8 24) header) downto 1 do
           (progn
            (setf base (logand #x1FFFFC (+ 4 base)))
-           (funcall (dma-write dma) +gpu-registers-begin+ (funcall (dma-read dma) base))))
+           (funcall (dma-write dma) +gpu-registers-begin+
+                    (funcall (dma-read dma) base))))
         ; TODO(Samantha): Some sources say that the psx only reads the high bit
         ; to test for end of the list.
-        (when (or (ldb-test (byte 32 0) (logand header #x800000))(= #xFFFFFF (ldb (byte 24 0) header)))
+        (when (or (ldb-test (byte 32 0) (logand header #x800000)) nil)
           (loop-finish))
         (setf base (logand header #x1FFFFC)))))
   (complete channel))
