@@ -10,6 +10,7 @@
 (defstruct psx
   "A model psx"
   (cpu (make-cpu) :type cpu)
+  (cdrom (psx-cdrom:make-cdrom) :type psx-cdrom:cdrom)
   (gpu (psx-gpu:make-gpu) :type psx-gpu:gpu)
   (spu (psx-spu:make-spu) :type psx-spu:spu)
   ; TODO(Samantha): I'm not convinced this is going to work out cleanly.

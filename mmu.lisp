@@ -53,6 +53,9 @@
   ; TODO(Samantha): Implement more places, simplify the cond.
   (let ((address (mask-address address)))
     (cond
+      ((in-range +cdrom-registers-begin+ +cdrom-registers-size+ address)
+       (psx-cdrom:read-cdrom-registers (psx-cdrom psx)
+                                       (mod address +cdrom-registers-begin+)))
       ((in-range +bios-begin-address+
                  (array-dimension (psx-bios-rom psx) 0)
                  address)
@@ -103,7 +106,7 @@
        (format t "Read from 0x~8,'0x in irq registers~%"address)
        0)
       ((in-range +timers-begin+ +timers-size+ address)
-       (format t "Read from 0x~8,'0x in timers~%"address)
+       ; (format t "Read from 0x~8,'0x in timers~%"address)
        0)
       ((in-range +dma-registers-begin+ +dma-registers-size+ address)
        (psx-dma:get-register (psx-dma psx) (mod address +dma-registers-begin+)))
@@ -119,6 +122,10 @@
 (defun write-byte* (psx address value)
   (let ((address (mask-address address)))
     (cond
+      ((in-range +cdrom-registers-begin+ +cdrom-registers-size+ address)
+       (psx-cdrom:write-cdrom-registers (psx-cdrom psx)
+                                       (mod address +cdrom-registers-begin+)
+                                       value))
       ((in-range +expansion-2-begin+ +expansion-2-size+ address)
        (format t "Wrote 0x~2,'0x to expansion2 @ 0x~8,'0x!~%" value address)
        value)
@@ -139,7 +146,7 @@
        (psx-spu:write-spu-half-word (psx-spu psx)
                                     (mod address +spu-registers-begin+) value))
       ((in-range +timers-begin+ +timers-size+ address)
-       (format t "Wrote 0x~4,'0x to timers @ 0x~8,'0x!~%" value address)
+       ; (format t "Wrote 0x~4,'0x to timers @ 0x~4,'0x!~%" value address)
        value)
       ((in-range +ram-begin+ +ram-size+ address)
        (write-half-word-to-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+) value))
@@ -187,7 +194,8 @@
          ((= address (+ +memory-control-begin+ #x20))
           (format t "Wrote 0x~8,'0x to common delay!~%" value)
           value)
-         (t (error "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address))))
+         (t
+          (error "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address))))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
        (format t "Wrote 0x~8,'0x to irq registers at 0x~8,'0x~%" value address)
        value)
@@ -200,7 +208,7 @@
       ((in-range +gpu-registers-begin+ +gpu-registers-size+ address)
        (psx-gpu::write-gpu (psx-gpu psx) (mod address +gpu-registers-begin+) value))
       ((in-range +timers-begin+ +timers-size+ address)
-       (format t "Wrote 0x~8,'0x to timers at 0x~8,'0x~%" value address)
+       ; (format t "Wrote 0x~8,'0x to timers at 0x~8,'0x~%" value address)
        value)
       ; RAM
       ((in-range +ram-begin+ +ram-size+ address)
