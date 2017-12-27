@@ -6,7 +6,7 @@
            #:cpu-memory-get-byte #:cpu-memory-set-byte
            #:cpu-memory-get-half-word #:cpu-memory-set-half-word
            #:cpu-memory-get-word #:cpu-memory-set-word
-           #:power-on #:step-cpu))
+           #:power-on #:step-cpu #:trigger-exception))
 
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
@@ -99,6 +99,7 @@
                           (unsigned-byte 32))
         set-register))
 (defun set-register (cpu index value)
+  "Sets a register in a load-delay conscious fashion."
   (setf (aref (cpu-delay-registers cpu) index) value)
   (setf (aref (cpu-delay-registers cpu) 0) 0))
 
@@ -182,6 +183,7 @@
   (setf (cop0:cop0-cause-register (cpu-cop0 cpu))
         (ash
          (case cause
+           (:interrupt #x0)
            (:address-load-error #x4)
            (:address-write-error #x5)
            (:syscall #x8)

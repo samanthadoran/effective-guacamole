@@ -2,6 +2,10 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
+; TODO(Samantha): Move these out to a different file within a helper struct.
+(defparameter *interrupt-status* #x00000000)
+(defparameter *interrupt-mask* #x00000000)
+
 (declaim (ftype (function ((simple-array (unsigned-byte 8))
                            (unsigned-byte 32)
                            (unsigned-byte 32))
@@ -83,7 +87,9 @@
        (read-half-word-from-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
        (format t "Read from 0x~8,'0x in irq registers~%" address)
-       0)
+       (if (= address +irq-registers-begin+)
+         *interrupt-status*
+         *interrupt-mask*))
       ; Unimplemented.
       (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -103,8 +109,10 @@
       ((in-range +ram-begin+ +ram-size+ address)
        (read-word-from-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
-       (format t "Read from 0x~8,'0x in irq registers~%"address)
-       0)
+      (format t "Read from 0x~8,'0x in irq registers~%"address)
+       (if (= address +irq-registers-begin+)
+         *interrupt-status*
+         *interrupt-mask*))
       ((in-range +timers-begin+ +timers-size+ address)
        ; (format t "Read from 0x~8,'0x in timers~%"address)
        0)
@@ -151,8 +159,10 @@
       ((in-range +ram-begin+ +ram-size+ address)
        (write-half-word-to-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+) value))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
-       (format t "Wrote 0x~4,'0x to irq registers @ 0x~8,'0x!~%" value address)
-       value)
+      (format t "Wrote 0x~4,'0x to irq registers @ 0x~8,'0x!~%" value address)
+      (if (= address +irq-registers-begin+)
+        (setf *interrupt-status* (logand #xFFFF *interrupt-mask* value))
+        (setf *interrupt-mask* value)))
       ; Unimplemented.
       (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
@@ -198,7 +208,9 @@
           (error "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address))))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
        (format t "Wrote 0x~8,'0x to irq registers at 0x~8,'0x~%" value address)
-       value)
+       (if (= address +irq-registers-begin+)
+         (setf *interrupt-status* (logand #xFFFF *interrupt-mask* value))
+         (setf *interrupt-mask* (logand #xFFFF value))))
       ((= address +ram-size-begin+)
        (format t "Wrote 0x~8,'0x to ram size!~%" value)
        value)
@@ -221,6 +233,14 @@
 (declaim (ftype (function (psx) function) map-memory))
 (defun map-memory (psx)
   "Sets functions for easy reading and writing throughout the system."
+  (setf
+   (psx-cdrom:cdrom-exception-callback (psx-cdrom psx))
+   (lambda ()
+           ; Put the interrupt in the interrupt_status register.
+           (write-word* psx +irq-registers-begin+
+                       (logior #x4 (load-word* psx +irq-registers-begin+)))
+           (psx-cpu:trigger-exception (psx-cpu psx) :cause :interrupt)
+           0))
   (setf
    (psx-dma:dma-read (psx-dma psx))
    (lambda (address) (load-word* psx address)))
