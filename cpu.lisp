@@ -66,6 +66,8 @@
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
   (cop0 (cop0:make-cop0) :type cop0:cop0)
+  (branch-opcode nil :type boolean)
+  (in-branch-delay nil :type boolean)
   ; TODO(Samantha): These are awful and shouldn't really be necessary.
   (memory-get-byte
    (lambda (address) (declare (ignore address)) 0)
@@ -163,45 +165,63 @@
      :shift-amount (ldb (byte 5 6) instruction-as-word)
      :secondary-operation-code (ldb (byte 6 0) instruction-as-word))))
 
-; TODO(Samantha): This needs special care when happening in a branch delay slot.
 (declaim (ftype (function (cpu &key (:cause keyword))
                           (unsigned-byte 32))
                 trigger-exception))
 (defun trigger-exception (cpu &key cause)
-  ; Exception handler address is determined by the 22nd (BEV) bit of
-  ; cop0_12 (status register)
-  (setf (cpu-program-counter cpu)
-        (if (ldb-test (byte 1 22) (cop0:cop0-status-register (cpu-cop0 cpu)))
-          +rom-exception-vector+
-          +ram-exception-vector+))
-  (setf
-   (cpu-next-program-counter cpu)
-   (wrap-word (+ (cpu-program-counter cpu) 4)))
-  (setf
-   (cop0:cop0-epc-register (cpu-cop0 cpu))
-   (cpu-current-program-counter cpu))
-  (setf (cop0:cop0-cause-register (cpu-cop0 cpu))
-        (ash
-         (case cause
-           (:interrupt #x0)
-           (:address-load-error #x4)
-           (:address-write-error #x5)
-           (:syscall #x8)
-           (:breakpoint #x9)
-           (:reserved-instruction #xA)
-           (:coprocessor-unusable #xB)
-           (:arithmetic-overflow #xC)
-           (otherwise (error "Unimplemented cause ~A" cause)))
-         2))
-  ; Only these two causes ever change the bad virtual address register.
-  (when (or (eq cause :address-write-error) (eq cause :address-load-error))
+  ; We can only trigger this exception if it's either not an interrupt, or
+  ; interrupts are enabled in the status register.
+  (when (or (not (eq cause :interrupt))
+            (ldb-test (byte 1 0) (cop0:cop0-status-register (cpu-cop0 cpu))))
+    ; Exception handler address is determined by the 22nd (BEV) bit of
+    ; cop0_12 (status register)
+    (setf (cpu-program-counter cpu)
+          (if (ldb-test (byte 1 22) (cop0:cop0-status-register (cpu-cop0 cpu)))
+            +rom-exception-vector+
+            +ram-exception-vector+))
     (setf
-     (cop0:cop0-bad-virtual-address-register (cpu-cop0 cpu))
-     (cpu-current-program-counter cpu)))
-  ; TODO(Samantha): Understand this mess better.
-  (setf
-   (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
-   (ldb (byte 6 0) (ash (cop0:cop0-status-register (cpu-cop0 cpu)) 2))))
+     (cpu-next-program-counter cpu)
+     (wrap-word (+ (cpu-program-counter cpu) 4)))
+    (setf
+     (cop0:cop0-epc-register (cpu-cop0 cpu))
+     (cpu-current-program-counter cpu))
+    (setf (cop0:cop0-cause-register (cpu-cop0 cpu))
+          (logior
+           (ash
+            (case cause
+              (:interrupt #x0)
+              (:address-load-error #x4)
+              (:address-write-error #x5)
+              (:syscall #x8)
+              (:breakpoint #x9)
+              (:reserved-instruction #xA)
+              (:coprocessor-unusable #xB)
+              (:arithmetic-overflow #xC)
+              (otherwise (error "Unimplemented cause ~A" cause)))
+            2)
+           (ash
+            (if (ldb-test (byte 16 0)
+                          (logand (funcall (cpu-memory-get-word cpu) +irq-registers-begin+)
+                                  (funcall (cpu-memory-get-word cpu) (+ +irq-registers-begin+ 4))))
+              1
+              0)
+            10)))
+    ; Exceptions get a little weird if they are in branch delay slots. Move
+    ; back by four to compensate and set the exception in branch delay flag of
+    ; the cause register.
+    (when (cpu-in-branch-delay cpu)
+      (setf (ldb (byte 31 0) (cop0:cop0-cause-register (cpu-cop0 cpu))) 1)
+      (setf (cop0:cop0-epc-register (cpu-cop0 cpu)) (wrap-word (- (cop0:cop0-epc-register (cpu-cop0 cpu)) 4))))
+    ; Only these two causes ever change the bad virtual address register.
+    (when (or (eq cause :address-write-error) (eq cause :address-load-error))
+      (setf
+       (cop0:cop0-bad-virtual-address-register (cpu-cop0 cpu))
+       (cpu-current-program-counter cpu)))
+    ; TODO(Samantha): Understand this mess better.
+    (setf
+     (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
+     (ldb (byte 6 0) (ash (cop0:cop0-status-register (cpu-cop0 cpu)) 2))))
+  (cop0:cop0-status-register (cpu-cop0 cpu)))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
 (defun execute (cpu instruction)
@@ -227,6 +247,10 @@
   ; address as the branch instruction itself. Exceptions add another
   ; complication to this process.
   (let ((instruction (decode cpu (fetch cpu))))
+    (setf (cpu-in-branch-delay cpu) nil)
+    (when (cpu-branch-opcode cpu)
+      (setf (cpu-branch-opcode cpu) nil)
+      (setf (cpu-in-branch-delay cpu) t))
     (setf (cpu-current-program-counter cpu) (cpu-program-counter cpu))
     (setf (cpu-program-counter cpu) (cpu-next-program-counter cpu))
     (setf (cpu-next-program-counter cpu)

@@ -12,6 +12,7 @@
     (branch cpu (sign-extend immediate))))
 
 (def-j-type jmp #x02
+  (setf (cpu-branch-opcode cpu) t)
   (setf (cpu-next-program-counter cpu)
         (logior
          (logand (cpu-program-counter cpu) #xf0000000)
@@ -43,6 +44,7 @@
 
 
 (def-i-type jr #xFF08
+  (setf (cpu-branch-opcode cpu) t)
   (setf
    (cpu-next-program-counter cpu)
    (aref (cpu-registers cpu) source-register)))
@@ -62,6 +64,14 @@
 ; work on the status register and leaves the rest up to the exception handler.
 ; Move this somewhere more appropriate?
 (def-i-type rfe #xC0010
+  ; TODO(Samantha): The way we're dealing with bit 10 from the cause register
+  ; is really hacky. A getter and setter for this that handled this magic in
+  ; the background would be much better.
+  ; Zero out the exception in the cause register from hardware sources until we
+  ; enter another.
+  (setf
+   (ldb (byte 1 10) (cop0:cop0-cause-register (cpu-cop0 cpu)))
+   0)
   (setf
    (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
    (ldb
@@ -71,6 +81,7 @@
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))
                 branch))
 (defun branch (cpu offset)
+  (setf (cpu-branch-opcode cpu) t)
   (setf
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) (ash offset 2)))))
