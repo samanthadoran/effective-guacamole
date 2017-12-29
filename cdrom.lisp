@@ -87,7 +87,8 @@
                 acknowledge-interrupts))
 (defun acknowledge-interrupts (word cdrom)
   (when (/= (ldb (byte 3 0) word) 7)
-    (error "We're not clearing all the irq bits? Uhhh....Word is #x~8,'0x~%" word))
+    (error "We're not clearing all the irq bits? Uhhh....Word is #x~8,'0x~%"
+           word))
   (loop for i from 1 to 7
     do (setf (aref (cdrom-interrupts-pending cdrom) i) nil))
   (when (ldb-test (byte 1 3) word)
@@ -97,7 +98,7 @@
   ; Acking the interrupts clears the response fifo.
   ; TODO(Samantha): When you ack all of them, or on any ack?
   (when (ldb-test (byte 8 0) word)
-    (setf (status-register-response-fifo-is-empty (cdrom-status cdrom)) t))
+    (clear-response-fifo cdrom))
   word)
 
 (declaim (ftype (function (cdrom)) clear-parameter-fifo))
@@ -109,6 +110,14 @@
   (setf (cdrom-parameter-fifo-length cdrom) 0)
   (values))
 
+(declaim (ftype (function (cdrom)) clear-response-fifo))
+(defun clear-response-fifo (cdrom)
+  (setf (status-register-response-fifo-is-empty (cdrom-status cdrom)) t)
+  (setf (cdrom-response-fifo cdrom) (list))
+  (setf (cdrom-response-fifo-tail cdrom) (list))
+  (setf (cdrom-response-fifo-length cdrom) 0)
+  (values))
+
 (declaim (ftype (function ((unsigned-byte 8) cdrom)
                           (unsigned-byte 8))
                 word-to-interrupt-flag))
@@ -116,7 +125,7 @@
   (when (ldb-test (byte 5 0) word)
     (acknowledge-interrupts word cdrom))
   (when (ldb-test (byte 1 6) word)
-  (clear-parameter-fifo cdrom))
+    (clear-parameter-fifo cdrom))
   word)
 
 (declaim (ftype (function ((unsigned-byte 8) cdrom) (unsigned-byte 8))
@@ -127,24 +136,28 @@
     (setf (status-register-parameter-fifo-is-full (cdrom-status cdrom)) t))
   (if (not (car (cdrom-parameter-fifo cdrom)))
     (progn
+     (setf (status-register-parameter-fifo-is-empty (cdrom-status cdrom)) nil)
      (setf (cdrom-parameter-fifo cdrom) (list word))
      (setf (cdrom-parameter-fifo-tail cdrom) (cdrom-parameter-fifo cdrom)))
     (progn
      (setf (cdr (cdrom-parameter-fifo-tail cdrom))
            (list word))
-     (setf (cdrom-parameter-fifo-tail cdrom) (cdr (cdrom-parameter-fifo-tail cdrom)))))
+     (setf (cdrom-parameter-fifo-tail cdrom)
+           (cdr (cdrom-parameter-fifo-tail cdrom)))))
   word)
 
 (declaim (ftype (function (cdrom) (unsigned-byte 8)) read-response-fifo))
 (defun read-response-fifo (cdrom)
   (let ((response 0))
     (when (car (cdrom-response-fifo cdrom))
+      (decf (cdrom-response-fifo-length cdrom))
       (setf response (car (cdrom-response-fifo cdrom)))
       (setf (cdrom-response-fifo cdrom) (cdr (cdrom-response-fifo cdrom)))
       (unless (car (cdrom-response-fifo cdrom))
         (setf (cdrom-response-fifo cdrom) (list))
         (setf (cdrom-response-fifo-tail cdrom) (list))
         (setf (status-register-response-fifo-is-empty (cdrom-status cdrom)) t)))
+    (format t "Read response #x~2,'0x~%" response)
     response))
 
 (declaim (ftype (function ((unsigned-byte 8) cdrom) (unsigned-byte 8))
@@ -159,7 +172,8 @@
     (progn
      (setf (cdr (cdrom-response-fifo-tail cdrom))
            (list word))
-     (setf (cdrom-response-fifo-tail cdrom) (cdr (cdrom-response-fifo-tail cdrom)))))
+     (setf (cdrom-response-fifo-tail cdrom)
+           (cdr (cdrom-response-fifo-tail cdrom)))))
   word)
 
 (declaim (ftype (function (cdrom) boolean) remaining-interrupts))
@@ -174,54 +188,71 @@
 (declaim (ftype (function ((unsigned-byte 8) cdrom) (unsigned-byte 8))
                 write-command-word))
 (defun write-command-word (word cdrom)
-  (unless (remaining-interrupts cdrom)
-    (case word
-      ; TODO(Samantha): This needs to trigger an exception with cause :int
-      (#x19
-        (unless (car (cdrom-parameter-fifo cdrom))
-          (error "This shouldn't happen, command #x19 requires a subfunction..~%"))
-        (if (= (car (cdrom-parameter-fifo cdrom)) #x20)
-          (progn
-           ; CDrom bios version: 10/01/1997 C2
-           (write-response-fifo #x97 cdrom)
-           (write-response-fifo #x01 cdrom)
-           (write-response-fifo #x10 cdrom)
-           (write-response-fifo #xC2 cdrom)
-           (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
-           (funcall (cdrom-exception-callback cdrom)))
-          (error "Unrecognized test subfunction #x~2,'0x~%" (car (cdrom-parameter-fifo cdrom)))))
-      (otherwise (error "Unhandled CDrom command word #x~2,'0x~%" word)))
-    (clear-parameter-fifo cdrom))
+  (unless (status-register-busy (cdrom-status cdrom))
+    (unless (remaining-interrupts cdrom)
+      (case word
+        (#x1
+          (format t "Command #x1: GetStat~%")
+          ; TODO(Samantha): Spec out the proper cdrom stat register.
+          (write-response-fifo #x0 cdrom)
+          (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
+          (funcall (cdrom-exception-callback cdrom)))
+        (#x19
+          (when (car (cdrom-parameter-fifo cdrom))
+            (unless (= (car (cdrom-parameter-fifo cdrom)) #x20)
+              (error "Unrecognized test subfunction #x~2,'0x~%"
+                     (car (cdrom-parameter-fifo cdrom))))
+            (format t "Command #x19(#x20): Self Test.~%")
+            (write-response-fifo #x97 cdrom)
+            (write-response-fifo #x01 cdrom)
+            (write-response-fifo #x10 cdrom)
+            (write-response-fifo #xC2 cdrom)
+            (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
+            (funcall (cdrom-exception-callback cdrom))))
+        (otherwise (error "Unhandled CDrom command word #x~2,'0x~%" word)))
+      (clear-parameter-fifo cdrom)))
   word)
 
 (declaim (ftype (function (cdrom (unsigned-byte 2))
                           (unsigned-byte 8))
                 read-cdrom-registers))
 (defun read-cdrom-registers (cdrom offset)
+  (format t "Read from cdrom offset #x~1,'0x with index #x~1,'0x~%"
+          offset (status-register-index (cdrom-status cdrom)))
   (case offset
     (0 (status-register-to-word (cdrom-status cdrom)))
     (1
       (case (status-register-index (cdrom-status cdrom))
            (1 (read-response-fifo cdrom))
-           (otherwise (error "Unhandled read from cdrom offset 1 with index #x~1,'0x. We only handle index 1 for now.~%" (status-register-index (cdrom-status cdrom))))))
+           (otherwise
+            (error "Unhandled read from cdrom offset 1 with index #x~1,'0x. ~
+                    We only handle index 1 for now.~%"
+                   (status-register-index (cdrom-status cdrom))))))
     ; (2)
     (3 (case (status-register-index (cdrom-status cdrom))
          (0 (interrupt-enable-to-word (cdrom-interrupt-enable cdrom)))
          ; TODO(Samantha): Move this out to a function and actually set these
          ; values instead of just putting magic numbers.
          (1 (logior
-             (ash #x3 0)
+             (ash (if (remaining-interrupts cdrom) #x3 0) 0)
              (ash 0 3)
-             (ash 1 4)
+             (ash (if (remaining-interrupts cdrom) 1 0) 4)
              (ash #x7 5)))
          (2 (interrupt-enable-to-word (cdrom-interrupt-enable cdrom)))
-         (otherwise (error "Unhandled read from cdrom offset 3 with index #x~1,'0x. We only handle index 0 and 2 for now.~%" (status-register-index (cdrom-status cdrom))))))
-    (otherwise (error "Unhandled cdrom read at offset #x~1,'0x with index #x~1,'0x~%" offset (status-register-index (cdrom-status cdrom))))))
+         (otherwise (error "Unhandled read from cdrom offset 3 with index ~
+                            #x~1,'0x. We only handle index 0 and 2 for now.~%"
+                           (status-register-index (cdrom-status cdrom))))))
+    (otherwise (error "Unhandled cdrom read at offset #x~1,'0x with ~
+                       index #x~1,'0x~%"
+                      offset (status-register-index (cdrom-status cdrom))))))
 
 (declaim (ftype (function (cdrom (unsigned-byte 2) (unsigned-byte 8))
                           (unsigned-byte 8))
                 write-cdrom-registers))
 (defun write-cdrom-registers (cdrom offset value)
+  (format t "Write of value #x~2,'0x to cdrom offset #x~1,'0x with ~
+             index #x~1,'0x~%"
+          value offset (status-register-index (cdrom-status cdrom)))
   (case offset
     (0 (word-to-status-register value (cdrom-status cdrom)))
     (1
@@ -249,6 +280,7 @@
        (otherwise (error "Got a write to cdrom offset #x3 with ~
                         index #x~1,'0x. Only Offsets #x1 are handled for now.~%"
                          (status-register-index (cdrom-status cdrom))))))
-    (otherwise (error "Unhandled cdrom write of #x~2,'0x at offset #x~1,'0x with index #x~1,'0x~%"
+    (otherwise (error "Unhandled cdrom write of #x~2,'0x at offset #x~1,'0x ~
+                       with index #x~1,'0x~%"
                       value offset (status-register-index (cdrom-status cdrom)))))
   value)

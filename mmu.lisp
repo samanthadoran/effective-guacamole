@@ -86,7 +86,9 @@
       ((in-range +ram-begin+ +ram-size+ address)
        (read-half-word-from-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
-       (format t "Read from 0x~8,'0x in irq registers~%" address)
+       (format t "Read from 0x~8,'0x in irq registers, got 0x~4,'0x~%" address (if (= address +irq-registers-begin+)
+                                                                                 *interrupt-status*
+                                                                                 *interrupt-mask*))
        (if (= address +irq-registers-begin+)
          *interrupt-status*
          *interrupt-mask*))
@@ -109,7 +111,9 @@
       ((in-range +ram-begin+ +ram-size+ address)
        (read-word-from-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
-      (format t "Read from 0x~8,'0x in irq registers~%"address)
+      (format t "Read from 0x~8,'0x in irq registers, got 0x~4,'0x~%" address (if (= address +irq-registers-begin+)
+                                                                                *interrupt-status*
+                                                                                *interrupt-mask*))
        (if (= address +irq-registers-begin+)
          *interrupt-status*
          *interrupt-mask*))
@@ -161,7 +165,7 @@
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
       (format t "Wrote 0x~4,'0x to irq registers @ 0x~8,'0x!~%" value address)
       (if (= address +irq-registers-begin+)
-        (setf *interrupt-status* (logand #xFFFF *interrupt-mask* value))
+        (setf *interrupt-status* (logand #xFFFF *interrupt-status* value))
         (setf *interrupt-mask* value)))
       ; Unimplemented.
       (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address)))))
@@ -209,7 +213,7 @@
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
        (format t "Wrote 0x~8,'0x to irq registers at 0x~8,'0x~%" value address)
        (if (= address +irq-registers-begin+)
-         (setf *interrupt-status* (logand #xFFFF *interrupt-mask* value))
+         (setf *interrupt-status* (logand #xFFFF *interrupt-status* value))
          (setf *interrupt-mask* (logand #xFFFF value))))
       ((= address +ram-size-begin+)
        (format t "Wrote 0x~8,'0x to ram size!~%" value)
@@ -237,8 +241,7 @@
    (psx-cdrom:cdrom-exception-callback (psx-cdrom psx))
    (lambda ()
            ; Put the interrupt in the interrupt_status register.
-           (write-word* psx +irq-registers-begin+
-                       (logior #x4 (load-word* psx +irq-registers-begin+)))
+           (setf *interrupt-status* (logior #x4 (load-word* psx +irq-registers-begin+)))
            (psx-cpu:trigger-exception (psx-cpu psx) :cause :interrupt)
            0))
   (setf

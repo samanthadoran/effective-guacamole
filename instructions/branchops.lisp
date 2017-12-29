@@ -42,7 +42,6 @@
   (when (> (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0)
     (branch cpu (sign-extend immediate))))
 
-
 (def-i-type jr #xFF08
   (setf (cpu-branch-opcode cpu) t)
   (setf
