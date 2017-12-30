@@ -178,12 +178,7 @@
 
 (declaim (ftype (function (cdrom) boolean) remaining-interrupts))
 (defun remaining-interrupts (cdrom)
-  (let ((remaining-interrupts nil))
-    (loop for i from 0 to 10
-      do (setf remaining-interrupts
-               (or remaining-interrupts
-                   (aref (cdrom-interrupts-pending cdrom) i))))
-    remaining-interrupts))
+  (reduce (lambda (x y) (or x y)) (cdrom-interrupts-pending cdrom)))
 
 (declaim (ftype (function ((unsigned-byte 8) cdrom) (unsigned-byte 8))
                 write-command-word))
@@ -194,7 +189,7 @@
         (#x1
           (format t "Command #x1: GetStat~%")
           ; TODO(Samantha): Spec out the proper cdrom stat register.
-          (write-response-fifo #x0 cdrom)
+          (write-response-fifo #x22 cdrom)
           (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
           (funcall (cdrom-exception-callback cdrom)))
         (#x19
@@ -236,7 +231,7 @@
          (1 (logior
              (ash (if (remaining-interrupts cdrom) #x3 0) 0)
              (ash 0 3)
-             (ash (if (remaining-interrupts cdrom) 1 0) 4)
+             (ash (if (remaining-interrupts cdrom) 0 0) 4)
              (ash #x7 5)))
          (2 (interrupt-enable-to-word (cdrom-interrupt-enable cdrom)))
          (otherwise (error "Unhandled read from cdrom offset 3 with index ~
