@@ -51,5 +51,9 @@
 (declaim (ftype (function (pathname) (unsigned-byte 32)) setup-and-run))
 (defun setup-and-run (bios-rom-path)
   (let ((psx (make-console bios-rom-path)))
-    (loop do (step-cpu (psx-cpu psx))))
+    (loop
+      do (step-cpu (psx-cpu psx))
+      ; TODO(Samantha): This isn't even kind of right. It should be tied to
+      ; various clocks, not just each instruction.
+      do (psx-timers:advance-timers (psx-timers psx))))
   0)
