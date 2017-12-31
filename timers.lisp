@@ -16,7 +16,9 @@
   (irq-frequency :once :type keyword)
   (irq-style :pulse :type keyword)
   ; Each different timer has a different meaning for this selection...
-  (clock-source 0 :type (unsigned-byte 2)))
+  (clock-source 0 :type (unsigned-byte 2))
+  (reached-max-value nil :type boolean)
+  (reached-target-value nil :type boolean))
 
 (defstruct timer
   (current-value 0 :type (unsigned-byte 16))
@@ -26,23 +28,22 @@
   ; set of ways it syncs.
   (synchronization-modes nil :type boolean))
 
-(declaim (ftype (function (timer)
+(declaim (ftype (function (mode)
                           (unsigned-byte 16))
                 mode-to-word))
-(defun mode-to-word (timer)
-  (let ((mode (timer-mode timer)))
-    (logior
-     (ash (if (mode-synchronization-enabled mode) 1 0) 0)
-     (ash (mode-synchronization-mode mode) 1)
-     (ash (if (eql (mode-zero-counter-condition mode) :at-target) 1 0) 3)
-     (ash (if (mode-irq-at-target-value mode) 1 0) 4)
-     (ash (if (mode-irq-at-max-value mode) 1 0) 5)
-     (ash (if (eql (mode-irq-frequency mode) :repeat) 1 0) 6)
-     (ash (if (eql (mode-irq-style mode) :toggle) 1 0) 7)
-     (ash (mode-clock-source mode) 8)
-     (ash (if (has-irq timer) 1 0) 10)
-     (ash (if (reached-target-value timer) 1 0) 11)
-     (ash (if (reached-max-value timer) 1 0) 12))))
+(defun mode-to-word (mode)
+  (logior
+   (ash (if (mode-synchronization-enabled mode) 1 0) 0)
+   (ash (mode-synchronization-mode mode) 1)
+   (ash (if (eql (mode-zero-counter-condition mode) :at-target) 1 0) 3)
+   (ash (if (mode-irq-at-target-value mode) 1 0) 4)
+   (ash (if (mode-irq-at-max-value mode) 1 0) 5)
+   (ash (if (eql (mode-irq-frequency mode) :repeat) 1 0) 6)
+   (ash (if (eql (mode-irq-style mode) :toggle) 1 0) 7)
+   (ash (mode-clock-source mode) 8)
+   (ash (if (has-irq mode) 1 0) 10)
+   (ash (if (mode-reached-target-value mode) 1 0) 11)
+   (ash (if (mode-reached-max-value mode) 1 0) 12)))
 
 (declaim (ftype (function ((unsigned-byte 16))
                           mode)
@@ -58,21 +59,12 @@
    :irq-style (if (ldb-test (byte 1 7) word) :toggle :pulse)
    :clock-source (ldb (byte 2 8) word)))
 
-; TODO(Samantha): The following two functions aren't an instantaneous thing,
-; they're indications of whether it happened at all and are reset upon read.
-; Account for this.
-(declaim (ftype (function (timer) boolean) reached-target-value))
-(defun reached-target-value (timer)
-  (= (timer-current-value timer) (timer-target-value timer)))
-
-(declaim (ftype (function (timer) boolean) reached-max-value))
-(defun reached-max-value (timer)
-  (= (timer-current-value timer) #xFFFF))
-
-(declaim (ftype (function (timer) boolean) has-irq))
-(defun has-irq (timer)
-  (or (and (reached-target-value timer) (mode-irq-at-target-value (timer-mode timer)))
-      (and (reached-max-value timer) (mode-irq-at-max-value (timer-mode timer)))))
+(declaim (ftype (function (mode) boolean) has-irq))
+(defun has-irq (mode)
+  (or (and (mode-reached-target-value mode)
+           (mode-irq-at-target-value mode))
+      (and (mode-reached-max-value mode)
+           (mode-irq-at-max-value mode))))
 
 (defstruct timers
   (timers
@@ -90,10 +82,15 @@
   (loop for timer being the elements of (timers-timers timers)
     do (when (= (timer-current-value timer) #xFFFF)
          (setf (timer-current-value timer) #x0000))
-    do (when (and (eql (mode-zero-counter-condition (timer-mode timer)) :at-target)
-                  (= (timer-current-value timer) (timer-target-value timer)))
+    do (when (and
+              (eql (mode-zero-counter-condition (timer-mode timer)) :at-target)
+              (= (timer-current-value timer) (timer-target-value timer)))
          (setf (timer-current-value timer) #x0000))
-    do (incf (timer-current-value timer)))
+    do (incf (timer-current-value timer))
+    do (setf (mode-reached-max-value (timer-mode timer))
+             (= (timer-current-value timer) #xFFFF))
+    do (setf (mode-reached-target-value (timer-mode timer))
+             (= (timer-current-value timer) (timer-target-value timer))))
   (values))
 
 (declaim (ftype (function (timers (unsigned-byte 8))
@@ -103,7 +100,10 @@
   (let ((timer (aref (timers-timers timers) (ldb (byte 2 4) offset))))
     (case (ldb (byte 4 0) offset)
       (0 (timer-current-value timer))
-      (4 (mode-to-word timer))
+      (4 (let ((mode (mode-to-word (timer-mode timer))))
+           (setf (mode-reached-max-value (timer-mode timer)) nil)
+           (setf (mode-reached-target-value (timer-mode timer)) nil)
+           mode))
       (8 (timer-target-value timer))
       (otherwise
        (error "Invalid timer register index: #x~1,'0x with timer ~
