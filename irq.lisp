@@ -5,6 +5,7 @@
            #:irq-exception-callback))
 
 (in-package :psx-irq)
+(declaim (optimize (speed 3) (safety 1)))
 
 (defstruct irq
   "Simple structure to hold the irq registers and perform bookkeeping on them."
