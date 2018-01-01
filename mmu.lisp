@@ -80,7 +80,8 @@
        (psx-spu:read-spu-half-word (psx-spu psx)
                                    (mod address +spu-registers-begin+)))
       ((in-range +ram-begin+ +ram-size+ address)
-       (read-half-word-from-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+)))
+       (read-half-word-from-byte-array (psx-ram psx)
+                                       (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
        (psx-irq:read-irq (psx-irq psx) (mod address +irq-registers-begin+)))
       ; Unimplemented.
@@ -100,7 +101,8 @@
         (psx-bios-rom psx) (- address +bios-begin-address+)))
       ; RAM
       ((in-range +ram-begin+ +ram-size+ address)
-       (read-word-from-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+)))
+       (read-word-from-byte-array (psx-ram psx)
+                                  (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
        (psx-irq:read-irq (psx-irq psx) (mod address +irq-registers-begin+)))
       ((in-range +timers-begin+ +timers-size+ address)
@@ -121,8 +123,8 @@
     (cond
       ((in-range +cdrom-registers-begin+ +cdrom-registers-size+ address)
        (psx-cdrom:write-cdrom-registers (psx-cdrom psx)
-                                       (mod address +cdrom-registers-begin+)
-                                       value))
+                                        (mod address +cdrom-registers-begin+)
+                                        value))
       ((in-range +expansion-2-begin+ +expansion-2-size+ address)
        (format t "Wrote 0x~2,'0x to expansion2 @ 0x~8,'0x!~%" value address)
        value)
@@ -141,18 +143,26 @@
     (cond
       ((in-range +spu-registers-begin+ +spu-registers-size+ address)
        (psx-spu:write-spu-half-word (psx-spu psx)
-                                    (mod address +spu-registers-begin+) value))
+                                    (mod address +spu-registers-begin+)
+                                    value))
       ((in-range +timers-begin+ +timers-size+ address)
-       (psx-timers:write-timers (psx-timers psx) (mod address +timers-begin+) value))
+       (psx-timers:write-timers (psx-timers psx)
+                                (mod address +timers-begin+)
+                                value))
       ((in-range +ram-begin+ +ram-size+ address)
-       (write-half-word-to-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+) value))
+       (write-half-word-to-byte-array (psx-ram psx)
+                                      (mod address +ram-size-non-mirrored+)
+                                      value))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
-       (psx-irq:write-irq (psx-irq psx) (mod address +irq-registers-begin+) value))
+       (psx-irq:write-irq (psx-irq psx)
+                          (mod address +irq-registers-begin+)
+                          value))
       ; Unimplemented.
       (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
 (declaim
- (ftype (function (psx (unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))
+ (ftype (function (psx (unsigned-byte 32) (unsigned-byte 32))
+                  (unsigned-byte 32))
         write-word*))
 (defun write-word* (psx address value)
   (let ((address (mask-address address)))
@@ -162,11 +172,15 @@
          ; Expansion base 1 register
          ((= address +memory-control-begin+)
           (when (/= value +expansion-1-begin+)
-            (error "Unexpected value for expansion-1-begin, got 0x~8,'0x, expected 0x~8,'0x!~%" value +expansion-1-begin+))
+            (error "Unexpected value for expansion-1-begin, got 0x~8,'0x, ~
+                    expected 0x~8,'0x!~%"
+                   value +expansion-1-begin+))
           value)
          ((= address (+ +memory-control-begin+ 4))
           (when (/= value +expansion-2-begin+)
-            (error "Unexpected value for expansion-2-begin, got 0x~8,'0x, expected 0x~8,'0x!~%" value +expansion-2-begin+))
+            (error "Unexpected value for expansion-2-begin, got 0x~8,'0x, ~
+                    expected 0x~8,'0x!~%"
+                   value +expansion-2-begin+))
           value)
          ((= address (+ +memory-control-begin+ 8))
           (format t "Wrote 0x~8,'0x to expansion 1 delay/size!~%" value)
@@ -190,9 +204,13 @@
           (format t "Wrote 0x~8,'0x to common delay!~%" value)
           value)
          (t
-          (error "Unexpected write of 0x~8,'0x! to Memory Control at 0x~8,'0x!~%" value address))))
+          (error "Unexpected write of 0x~8,'0x! to Memory Control ~
+                  at 0x~8,'0x!~%"
+                 value address))))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
-       (psx-irq:write-irq (psx-irq psx) (mod address +irq-registers-begin+) value))
+       (psx-irq:write-irq (psx-irq psx)
+                          (mod address +irq-registers-begin+)
+                          value))
       ((= address +ram-size-begin+)
        (format t "Wrote 0x~8,'0x to ram size!~%" value)
        value)
@@ -200,14 +218,22 @@
        (format t "Wrote 0x~8,'0x to cache control!~%" value)
        value)
       ((in-range +gpu-registers-begin+ +gpu-registers-size+ address)
-       (psx-gpu::write-gpu (psx-gpu psx) (mod address +gpu-registers-begin+) value))
+       (psx-gpu::write-gpu (psx-gpu psx)
+                           (mod address +gpu-registers-begin+)
+                           value))
       ((in-range +timers-begin+ +timers-size+ address)
-       (psx-timers:write-timers (psx-timers psx) (mod address +timers-begin+) value))
+       (psx-timers:write-timers (psx-timers psx)
+                                (mod address +timers-begin+)
+                                value))
       ; RAM
       ((in-range +ram-begin+ +ram-size+ address)
-       (write-word-to-byte-array (psx-ram psx) (mod address +ram-size-non-mirrored+) value))
+       (write-word-to-byte-array (psx-ram psx)
+                                 (mod address +ram-size-non-mirrored+)
+                                 value))
       ((in-range +dma-registers-begin+ +dma-registers-size+ address)
-       (psx-dma:set-register (psx-dma psx) (mod address +dma-registers-begin+) value))
+       (psx-dma:set-register (psx-dma psx)
+                             (mod address +dma-registers-begin+)
+                             value))
       ; Unimplemented.
       (t (error "Word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
