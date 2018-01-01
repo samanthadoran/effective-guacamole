@@ -17,10 +17,13 @@
   `(def-instruction
      ,name
      ,opcode
-     (let ((source-register (instruction-source-register instruction))
-           (target-register (instruction-target-register instruction))
-           (immediate (instruction-immediate-value instruction)))
-       (declare (ignorable source-register target-register immediate))
+     (let* ((source-register (instruction-source-register instruction))
+            (target-register (instruction-target-register instruction))
+            (immediate (instruction-immediate-value instruction))
+            (address
+             (wrap-word (+ (sign-extend immediate)
+                           (aref (cpu-registers cpu) source-register)))))
+       (declare (ignorable source-register target-register immediate address))
        (when *debug-cpu*
          (format t "#x~8,'0x(~A): ~A $~D $~D #x~4,'0x~%"
                  (instruction-address instruction)

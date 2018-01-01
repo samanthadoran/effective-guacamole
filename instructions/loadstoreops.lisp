@@ -12,148 +12,101 @@
   (setf (cpu-pending-load-register cpu) target-register)
   (setf
    (cpu-pending-load-value cpu)
-   (sign-extend-byte
-    (funcall (cpu-memory-get-byte cpu)
-             (wrap-word
-              (+
-               (sign-extend immediate)
-               (aref (cpu-registers cpu) source-register)))))))
+   (sign-extend-byte (funcall (cpu-memory-get-byte cpu) address))))
 
 (def-i-type lh #x21
-  (let ((address
-         (wrap-word
-          (+
-           (sign-extend immediate)
-           (aref (cpu-registers cpu) source-register)))))
-    (if (/= 0 (mod address 2))
-      (trigger-exception cpu :cause :address-load-error)
-      (progn
-       (setf (cpu-pending-load-register cpu) target-register)
-       (setf
-        (cpu-pending-load-value cpu)
-        (sign-extend (funcall (cpu-memory-get-half-word cpu) address)))))))
+  (if (/= 0 (mod address 2))
+    (trigger-exception cpu :cause :address-load-error)
+    (progn
+     (setf (cpu-pending-load-register cpu) target-register)
+     (setf
+      (cpu-pending-load-value cpu)
+      (sign-extend (funcall (cpu-memory-get-half-word cpu) address))))))
 
 ; TODO(Samantha): Shouldn't this and lwr be cache conscious?
 ; LWL and LWR are both meant to be executed in sequence, it wouldn't make sense
 ; for them to have a load delay.
 (def-i-type lwl #x22
-  (let* ((address
-          (wrap-word
-           (+
-            (aref (cpu-registers cpu) source-register)
-            (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFFFC))
+  (let* ((aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
     (setf (cpu-pending-load-register cpu) target-register)
     (setf (cpu-pending-load-value cpu)
-                  (case (ldb (byte 2 0) address)
-                    (0 (logior
-                        (logand current-value #x00FFFFFF)
-                        (wrap-word (ash aligned-word 24))))
-                    (1 (logior
-                        (logand current-value #x0000FFFF)
-                        (wrap-word (ash aligned-word 16))))
-                    (2 (logior
-                        (logand current-value #x000000FF)
-                        (wrap-word (ash aligned-word 8))))
-                    (3 (logior
-                        (logand current-value #x00000000)
-                        (wrap-word (ash aligned-word 0))))
-                    (otherwise (error "Unreachable.~%"))))))
+          (case (ldb (byte 2 0) address)
+            (0 (logior
+                (logand current-value #x00FFFFFF)
+                (wrap-word (ash aligned-word 24))))
+            (1 (logior
+                (logand current-value #x0000FFFF)
+                (wrap-word (ash aligned-word 16))))
+            (2 (logior
+                (logand current-value #x000000FF)
+                (wrap-word (ash aligned-word 8))))
+            (3 (logior
+                (logand current-value #x00000000)
+                (wrap-word (ash aligned-word 0))))
+            (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type lw #x23
-  (let ((address
-         (wrap-word
-          (+
-           (sign-extend immediate)
-           (aref (cpu-registers cpu) source-register)))))
-    (if (/= 0 (mod address 4))
-      (trigger-exception cpu :cause :address-load-error)
-      (progn
-       (setf (cpu-pending-load-register cpu) target-register)
-       (setf
-        (cpu-pending-load-value cpu)
-        (funcall (cpu-memory-get-word cpu) address))))))
+  (if (/= 0 (mod address 4))
+    (trigger-exception cpu :cause :address-load-error)
+    (progn
+     (setf (cpu-pending-load-register cpu) target-register)
+     (setf
+      (cpu-pending-load-value cpu)
+      (funcall (cpu-memory-get-word cpu) address)))))
 
 (def-i-type lbu #x24
   (setf (cpu-pending-load-register cpu) target-register)
   (setf (cpu-pending-load-value cpu)
-        (funcall (cpu-memory-get-byte cpu)
-                 (wrap-word
-                  (+
-                   (sign-extend immediate)
-                   (aref (cpu-registers cpu) source-register))))))
+        (funcall (cpu-memory-get-byte cpu) address)))
 
 (def-i-type lhu #x25
-  (let ((address
-         (wrap-word
-          (+
-           (sign-extend immediate)
-           (aref (cpu-registers cpu) source-register)))))
-    (if (/= 0 (mod address 2))
-      (trigger-exception cpu :cause :load-address-error)
-      (progn
-       (setf (cpu-pending-load-register cpu) target-register)
-       (setf
-        (cpu-pending-load-value cpu)
-        (funcall (cpu-memory-get-half-word cpu) address))))))
+  (if (/= 0 (mod address 2))
+    (trigger-exception cpu :cause :load-address-error)
+    (progn
+     (setf (cpu-pending-load-register cpu) target-register)
+     (setf
+      (cpu-pending-load-value cpu)
+      (funcall (cpu-memory-get-half-word cpu) address)))))
 
 (def-i-type lwr #x26
-  (let* ((address
-          (wrap-word
-           (+
-            (aref (cpu-registers cpu) source-register)
-            (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFFFC))
+  (let* ((aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (current-value (aref (cpu-registers cpu) target-register)))
     (setf (cpu-pending-load-register cpu) target-register)
     (setf (cpu-pending-load-value cpu)
-                  (case (ldb (byte 2 0) address)
-                    (0 (logior
-                        (logand current-value #x00000000)
-                        (wrap-word (ash aligned-word 0))))
-                    (1 (logior
-                        (logand current-value #xFF000000)
-                        (wrap-word (ash aligned-word -8))))
-                    (2 (logior
-                        (logand current-value #xFFFF0000)
-                        (wrap-word (ash aligned-word -16))))
-                    (3 (logior
-                        (logand current-value #xFFFFFF00)
-                        (wrap-word (ash aligned-word -24))))
-                    (otherwise (error "Unreachable.~%"))))))
+          (case (ldb (byte 2 0) address)
+            (0 (logior
+                (logand current-value #x00000000)
+                (wrap-word (ash aligned-word 0))))
+            (1 (logior
+                (logand current-value #xFF000000)
+                (wrap-word (ash aligned-word -8))))
+            (2 (logior
+                (logand current-value #xFFFF0000)
+                (wrap-word (ash aligned-word -16))))
+            (3 (logior
+                (logand current-value #xFFFFFF00)
+                (wrap-word (ash aligned-word -24))))
+            (otherwise (error "Unreachable.~%"))))))
 
 (def-i-type sb #x28
   (unless (is-cache-isolated cpu)
     (funcall (cpu-memory-set-byte cpu)
-             (wrap-word
-              (+
-               (sign-extend immediate)
-               (aref (cpu-registers cpu) source-register)))
+             address
              (ldb (byte 8 0) (aref (cpu-registers cpu) target-register)))))
 
 (def-i-type sh #x29
-  (let ((address
-         (wrap-word
-          (+
-           (sign-extend immediate)
-           (aref (cpu-registers cpu) source-register)))))
-    (if (/= 0 (mod address 2))
-      (trigger-exception cpu :cause :address-write-error)
-      (unless (is-cache-isolated cpu)
-        (funcall (cpu-memory-set-half-word cpu)
-                 address
-                 (ldb (byte 16 0) (aref (cpu-registers cpu) target-register)))))))
+  (if (/= 0 (mod address 2))
+    (trigger-exception cpu :cause :address-write-error)
+    (unless (is-cache-isolated cpu)
+      (funcall (cpu-memory-set-half-word cpu)
+               address
+               (ldb (byte 16 0) (aref (cpu-registers cpu) target-register))))))
 
 (def-i-type swl #x2A
-  (let* ((address
-          (wrap-word
-           (+
-            (aref (cpu-registers cpu) source-register)
-            (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFFFC))
+  (let* ((aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
     (unless (is-cache-isolated cpu)
@@ -175,25 +128,15 @@
                  (otherwise (error "Unreachable.~%")))))))
 
 (def-i-type sw #x2B
-  (let ((address
-         (wrap-word
-          (+
-           (sign-extend immediate)
-           (aref (cpu-registers cpu) source-register)))))
-    (if (/= 0 (mod address 4))
-      (trigger-exception cpu :cause :address-write-error)
-      (unless (is-cache-isolated cpu)
-        (funcall (cpu-memory-set-word cpu)
-                 address
-                 (aref (cpu-registers cpu) target-register))))))
+  (if (/= 0 (mod address 4))
+    (trigger-exception cpu :cause :address-write-error)
+    (unless (is-cache-isolated cpu)
+      (funcall (cpu-memory-set-word cpu)
+               address
+               (aref (cpu-registers cpu) target-register)))))
 
 (def-i-type swr #x2E
-  (let* ((address
-          (wrap-word
-           (+
-            (aref (cpu-registers cpu) source-register)
-            (sign-extend immediate))))
-         (aligned-address (logand address #xFFFFFFFC))
+  (let* ((aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
          (value (aref (cpu-registers cpu) target-register)))
     (unless (is-cache-isolated cpu)
