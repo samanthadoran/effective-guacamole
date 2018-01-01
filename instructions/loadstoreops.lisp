@@ -301,10 +301,9 @@
       (aref (cpu-registers cpu) target-register)))
     ; CAUSE
     (13
-     (unless (zerop (aref (cpu-registers cpu) target-register))
-       (error "Tried to write 0x~8,'0x to $cop0_~d~%"
-              (aref (cpu-registers cpu) target-register)
-              destination-register)))
+      (setf
+       (cop0:cop0-cause-register (cpu-cop0 cpu))
+       (aref (cpu-registers cpu) target-register)))
     (otherwise
      (error "Unknown write of 0x~8,'0X to $cop0_~d~%"
              (aref (cpu-registers cpu) target-register)

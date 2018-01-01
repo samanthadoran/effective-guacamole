@@ -29,7 +29,7 @@
 (def-i-type sltiu #x0B
   (set-register
    cpu target-register
-   (if (< (aref (cpu-registers cpu) source-register) immediate)
+   (if (< (aref (cpu-registers cpu) source-register) (sign-extend immediate))
      1
      0)))
 
