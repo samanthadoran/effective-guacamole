@@ -8,6 +8,8 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
+(defparameter *debug-cdrom* nil)
+
 (defstruct status-register
   ; TODO(Samantha): The flags in this register seem awkwardly redundant to me.
   ; I'm not sure I completely understand.
@@ -162,7 +164,8 @@
       (setf (cdrom-response-fifo cdrom) (cdr (cdrom-response-fifo cdrom)))
       (unless (car (cdrom-response-fifo cdrom))
         (clear-response-fifo cdrom)))
-    (format t "Read response #x~2,'0x~%" response)
+    (when *debug-cdrom*
+      (format t "Read response #x~2,'0x~%" response))
     response))
 
 (declaim (ftype (function (cdrom (unsigned-byte 8))
@@ -206,7 +209,8 @@
       (case word
         (#x1
           (unless *skip*
-            (format t "Command #x1: GetStat~%")
+            (when *debug-cdrom*
+              (format t "Command #x1: GetStat~%"))
             ; TODO(Samantha): Spec out the proper cdrom stat register.
             (write-response-fifo cdrom #x10)
             (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
@@ -217,7 +221,8 @@
             (unless (= (car (cdrom-parameter-fifo cdrom)) #x20)
               (error "Unrecognized test subfunction #x~2,'0x~%"
                      (car (cdrom-parameter-fifo cdrom))))
-            (format t "Command #x19(#x20): Self Test.~%")
+            (when *debug-cdrom*
+              (format t "Command #x19(#x20): Self Test.~%"))
             (write-response-fifo cdrom #x97)
             (write-response-fifo cdrom #x01)
             (write-response-fifo cdrom #x10)
@@ -232,8 +237,9 @@
                           (unsigned-byte 8))
                 read-cdrom-registers))
 (defun read-cdrom-registers (cdrom offset)
-  (format t "Read from cdrom offset #x~1,'0x with index #x~1,'0x~%"
-          offset (status-register-index (cdrom-status cdrom)))
+  (when *debug-cdrom*
+    (format t "Read from cdrom offset #x~1,'0x with index #x~1,'0x~%"
+            offset (status-register-index (cdrom-status cdrom))))
   (case offset
     (0 (status-register-to-word (cdrom-status cdrom)))
     (1
@@ -265,9 +271,10 @@
                           (unsigned-byte 8))
                 write-cdrom-registers))
 (defun write-cdrom-registers (cdrom offset value)
-  (format t "Write of value #x~2,'0x to cdrom offset #x~1,'0x with ~
-             index #x~1,'0x~%"
-          value offset (status-register-index (cdrom-status cdrom)))
+  (when *debug-cdrom*
+    (format t "Write of value #x~2,'0x to cdrom offset #x~1,'0x with ~
+               index #x~1,'0x~%"
+            value offset (status-register-index (cdrom-status cdrom))))
   (case offset
     (0 (word-to-status-register value (cdrom-status cdrom)))
     (1
