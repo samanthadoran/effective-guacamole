@@ -2,7 +2,7 @@
   (:nicknames #:timers)
   (:use :cl)
   (:export #:timers #:make-timers #:read-timers #:write-timers
-           #:advance-timers))
+           #:advance-timers #:timers-exception-callback))
 
 (in-package :psx-timers)
 (declaim (optimize (speed 3) (safety 1)))
@@ -18,9 +18,12 @@
   ; Each different timer has a different meaning for this selection...
   (clock-source 0 :type (unsigned-byte 2))
   (reached-max-value nil :type boolean)
-  (reached-target-value nil :type boolean))
+  (reached-target-value nil :type boolean)
+  (fired-irq nil :type boolean))
 
 (defstruct timer
+  (identifier :timer0 :type keyword)
+  (clock-divider 0 :type (unsigned-byte 8))
   (current-value 0 :type (unsigned-byte 16))
   (mode (make-mode) :type mode)
   (target-value 0 :type (unsigned-byte 16))
@@ -41,7 +44,7 @@
    (ash (if (eql (mode-irq-frequency mode) :repeat) 1 0) 6)
    (ash (if (eql (mode-irq-style mode) :toggle) 1 0) 7)
    (ash (mode-clock-source mode) 8)
-   (ash (if (has-irq mode) 1 0) 10)
+   (ash (if (has-irq mode) 0 1) 10)
    (ash (if (mode-reached-target-value mode) 1 0) 11)
    (ash (if (mode-reached-max-value mode) 1 0) 12)))
 
@@ -49,6 +52,12 @@
                           mode)
                   word-to-mode))
 (defun word-to-mode (word)
+  ; (when (and (ldb-test (byte 1 7) word) (or (ldb-test (byte 1 4) word)
+  ;                                           (ldb-test (byte 1 5) word)))
+  ;   (error "Timer irq wants toggle?~%"))
+  ; (when (and (ldb-test (byte 1 6) word) (or (ldb-test (byte 1 4) word)
+  ;                                           (ldb-test (byte 1 5) word)))
+  ;   (error "Timer irq wants repeat?~%"))
   (make-mode
    :synchronization-enabled (ldb-test (byte 1 0) word)
    :synchronization-mode (ldb (byte 2 1) word)
@@ -67,30 +76,74 @@
            (mode-irq-at-max-value mode))))
 
 (defstruct timers
+  (clock 0 :type (unsigned-byte 64))
+  (exception-callback
+   (lambda (keyword) (declare (ignore keyword)) 0)
+   :type (function (keyword) (unsigned-byte 9)))
   (timers
    (make-array 3
                :element-type 'timer
-               :initial-contents `(,(make-timer)
-                                   ,(make-timer)
-                                   ,(make-timer)))
+               :initial-contents `(,(make-timer :identifier :timer0 :clock-divider 1)
+                                   ,(make-timer :identifier :timer1 :clock-divider 8)
+                                   ,(make-timer :identifier :timer2 :clock-divider 30)))
    :type (simple-array timer (3))))
+
+(declaim (ftype (function (timer)
+                          boolean)
+                has-repeat-irq))
+(defun has-repeat-irq (timer)
+  (or
+   (and (= (timer-current-value timer) (timer-target-value timer))
+        (mode-irq-at-target-value (timer-mode timer)))
+   (and (= (timer-current-value timer) #xFFFF)
+        (mode-irq-at-max-value (timer-mode timer)))))
+
+(declaim (ftype (function (timers timer)
+                          (unsigned-byte 8))
+                generate-irq))
+(defun generate-irq (timers timer)
+  (if (eql (mode-irq-frequency (timer-mode timer)) :repeat)
+    (progn
+     (setf (mode-fired-irq (timer-mode timer))
+           (not (mode-fired-irq (timer-mode timer))))
+     (unless (mode-fired-irq (timer-mode timer))
+       (when (has-repeat-irq timer)
+         (funcall (timers-exception-callback timers) (timer-identifier timer)))))
+    (when (and (has-irq (timer-mode timer))
+               (not (mode-fired-irq (timer-mode timer))))
+      (funcall (timers-exception-callback timers) (timer-identifier timer))
+      (setf (mode-fired-irq (timer-mode timer)) t)))
+  0)
+
+(declaim (ftype (function (timers timer)
+                          (unsigned-byte 8))
+                advance-timer))
+(defun advance-timer (timers timer)
+  (when (= (timer-current-value timer) #xFFFF)
+    (setf (timer-current-value timer) #x0000))
+  (when (and
+         (eql (mode-zero-counter-condition (timer-mode timer)) :at-target)
+         (= (timer-current-value timer) (timer-target-value timer)))
+    (setf (timer-current-value timer) #x0000))
+  (when (zerop (mod (timers-clock timers) (timer-clock-divider timer)))
+    (incf (timer-current-value timer)))
+  (unless (mode-reached-max-value (timer-mode timer))
+    (setf (mode-reached-max-value (timer-mode timer))
+          (= (timer-current-value timer) #xFFFF)))
+  (unless (mode-reached-target-value (timer-mode timer))
+    (setf (mode-reached-target-value (timer-mode timer))
+          (= (timer-current-value timer) (timer-target-value timer))))
+  (generate-irq timers timer)
+  0)
 
 (declaim (ftype (function (timers)) advance-timers))
 (defun advance-timers (timers)
   ; TODO(Samantha): This only takes into account the timers being tied to one
   ; clock source.
+  (setf (timers-clock timers)
+        (logand #xFFFFFFFFFFFFFFFF (1+ (timers-clock timers))))
   (loop for timer being the elements of (timers-timers timers)
-    do (when (= (timer-current-value timer) #xFFFF)
-         (setf (timer-current-value timer) #x0000))
-    do (when (and
-              (eql (mode-zero-counter-condition (timer-mode timer)) :at-target)
-              (= (timer-current-value timer) (timer-target-value timer)))
-         (setf (timer-current-value timer) #x0000))
-    do (incf (timer-current-value timer))
-    do (setf (mode-reached-max-value (timer-mode timer))
-             (= (timer-current-value timer) #xFFFF))
-    do (setf (mode-reached-target-value (timer-mode timer))
-             (= (timer-current-value timer) (timer-target-value timer))))
+    do (advance-timer timers timer))
   (values))
 
 (declaim (ftype (function (timers (unsigned-byte 8))
@@ -103,6 +156,7 @@
       (4 (let ((mode (mode-to-word (timer-mode timer))))
            (setf (mode-reached-max-value (timer-mode timer)) nil)
            (setf (mode-reached-target-value (timer-mode timer)) nil)
+           (setf (mode-fired-irq (timer-mode timer)) nil)
            mode))
       (8 (timer-target-value timer))
       (otherwise

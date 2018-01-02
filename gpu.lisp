@@ -6,7 +6,8 @@
         :swank
         :livesupport
         :cepl.skitter.sdl2
-        :cepl.devil)
+        :cepl.devil
+        :memory)
   (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
            #:read-gpu #:write-gpu))
 
@@ -106,7 +107,7 @@
 
 (defvar *viewport* (make-viewport '(1024 512)))
 ; TODO(Samantha): Move this into a gpu power on?
-(cepl:repl)
+(cepl:repl 1024 512)
 
 (defstruct gpu
   "A model psx gpu"
@@ -342,6 +343,25 @@
              is not fully implemented!~%"))
   0)
 
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                fill-rectangle))
+(defun fill-rectangle (gpu color top-left size)
+  (when *debug-gpu*
+    (format t "GP0(#x02): fill-rectangle  is not implemented correctly!~%"))
+  (render-opaque-shaded-triangle gpu color top-left
+                                 ; Bottom left
+                                 color (wrap-word (+ top-left (logand #xFFFF0000 size)))
+                                 ; Top Right
+                                 color (wrap-word (+ top-left (logand #x0000FFFF size))))
+                                 ; Top Right
+  (render-opaque-shaded-triangle gpu color (wrap-word (+ top-left (logand #x0000FFFF size)))
+                                  ; Bottom Right
+                                 color (wrap-word (+ top-left size))
+                                 ; Bottom Left
+                                 color (wrap-word (+ top-left (logand #x0000FFFF size))))
+  0)
+
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32))
@@ -414,6 +434,9 @@
       (#x00
         (setf required-arguments 1)
         (setf operation (lambda (gpu value) (declare (ignore gpu value)) 0)))
+      (#x02
+        (setf required-arguments 3)
+        (setf operation #'fill-rectangle))
       (#x30
         (setf required-arguments 6)
         (setf operation #'render-opaque-shaded-triangle))
@@ -467,14 +490,18 @@
       (format t "GP0(#x~2,'0x)~%" value)))
   0)
 
-(declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-color))
+(declaim (ftype (function ((unsigned-byte 32))
+                          (simple-array single-float (4)))
+                word-to-color))
 (defun word-to-color (word)
   (v!
    (ldb (byte 8 0) word)
    (ldb (byte 8 8) word)
    (ldb (byte 8 16) word)))
 
-(declaim (ftype (function ((unsigned-byte 32)) (simple-array single-float (4))) word-to-position))
+(declaim (ftype (function ((unsigned-byte 32))
+                          (simple-array single-float (4)))
+                word-to-position))
 (defun word-to-position (word)
   (let ((x (if (ldb-test (byte 1 10) word)
              (* -1 (logand #x7FF (1+ (lognot (ldb (byte 11 0) word)))))
@@ -505,7 +532,6 @@
     (when (= (gp0-operation-current-number-of-arguments (gpu-gp0-op gpu))
              (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)))
       (setf (gp0-operation-required-number-of-arguments gp0-op) 0)
-      ; (format t "Args are: (~{0x~8,'0x~^, ~})~%" (gp0-operation-arguments gp0-op))
       (apply (gp0-operation-function gp0-op)
         (cons gpu (gp0-operation-arguments gp0-op)))))
   0)

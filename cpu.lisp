@@ -20,15 +20,17 @@
   (word 0 :type (unsigned-byte 32))
   (address 0 :type (unsigned-byte 32))
   ; A short representation of an instruction without any specific information.
-  ; Used for indexing into the hashtable instead of having a giant case
-  ; statement.
+  ; Used for indexing into the hashtable of instructions instead of using a
+  ; giant case statement.
   (masked-opcode 0 :type (unsigned-byte 20))
+  ; The memory segment in which this instruction was fetched from.
   (segment :invalid :type keyword)
   (operation
    (lambda (cpu instruction)
            (declare (ignore cpu instruction))
            (values))
    :type (function (cpu instruction) (values &optional)))
+  ; The r3000a abbreviation for this instruction.
   (mnemonic "" :type string)
   ; Bits [31:26]
   (operation-code 0 :type (unsigned-byte 6))
@@ -126,7 +128,10 @@
     (logior
      #x000C0000
      (ash (ldb (byte 2 26) instruction-as-word) 8)
-     (ldb (byte 5 21) instruction-as-word))
+     ; Cop2 opcodes have a different encoding because of course they do.
+     (if (= (ldb (byte 2 26) instruction-as-word) 2)
+       (ldb (byte 6 0) instruction-as-word)
+       (ldb (byte 5 21) instruction-as-word)))
     (if (ldb-test (byte 6 26) instruction-as-word)
       ; If any bits in [26, 31] of instruction-as-word are set, we can just use
       ; those as our masked opcode, otherwise we have a special opcode and mark
@@ -145,7 +150,7 @@
      :operation (or
                  (cadr (gethash masked-opcode instructions))
                  (lambda (cpu instruction)
-                         (declare (ignore instruction))
+                         (error "Illegal instruction! Word: 0x~8,'0x, masked: 0x~6,'0x~%" (instruction-word instruction) (instruction-masked-opcode instruction))
                          (trigger-exception cpu :cause :reserved-instruction)
                          (values)))
      :address (cpu-program-counter cpu)
@@ -207,7 +212,8 @@
   ; the cause register.
   (when (cpu-in-branch-delay cpu)
     (setf (ldb (byte 31 0) (cop0:cop0-cause-register (cpu-cop0 cpu))) 1)
-    (setf (cop0:cop0-epc-register (cpu-cop0 cpu)) (wrap-word (- (cop0:cop0-epc-register (cpu-cop0 cpu)) 4))))
+    (setf (cop0:cop0-epc-register (cpu-cop0 cpu))
+          (wrap-word (- (cop0:cop0-epc-register (cpu-cop0 cpu)) 4))))
   ; Only these two causes ever change the bad virtual address register.
   (when (or (eq cause :address-write-error) (eq cause :address-load-error))
     (setf

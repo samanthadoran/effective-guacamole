@@ -185,6 +185,9 @@
 (def-i-type swc3 #x3B
   (trigger-exception cpu :cause :coprocessor-unusable))
 
+(def-i-type gte-nop #xC0200
+  (format t "gte nop?~%"))
+
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.
 (def-r-type mfc0 #xC0000

@@ -47,7 +47,8 @@
    (aref array offset)
    (ash (aref array (+ 1 offset)) 8)))
 
-(declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 8))
+(declaim (ftype (function (psx (unsigned-byte 32))
+                          (unsigned-byte 8))
                 load-byte*))
 (defun load-byte* (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
@@ -70,7 +71,8 @@
       ; Unimplemented.
       (t (error "Byte reads to 0x~8,'0X are unimplemented~%" address)))))
 
-(declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 16))
+(declaim (ftype (function (psx (unsigned-byte 32))
+                          (unsigned-byte 16))
                 load-half-word*))
 (defun load-half-word* (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
@@ -84,14 +86,19 @@
                                        (mod address +ram-size-non-mirrored+)))
       ((in-range +irq-registers-begin+ +irq-registers-size+ address)
        (psx-irq:read-irq (psx-irq psx) (mod address +irq-registers-begin+)))
+      ((in-range +timers-begin+ +timers-size+ address)
+       (psx-timers:read-timers (psx-timers psx) (mod address +timers-begin+)))
       ; Unimplemented.
       (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address)))))
 
-(declaim (ftype (function (psx (unsigned-byte 32)) (unsigned-byte 32))
+(declaim (ftype (function (psx (unsigned-byte 32))
+                          (unsigned-byte 32))
                 load-word*))
 (defun load-word* (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
   (let ((address (mask-address address)))
+    (when psx-cpu::*debug-cpu*
+      (format t "Load address is 0x~8,'0x~%" address))
     (cond
       ; BIOS
       ((in-range +bios-begin-address+
@@ -116,7 +123,8 @@
 
 ; TODO(Samantha): Figure out a way to fix this shadowing.
 (declaim
- (ftype (function (psx (unsigned-byte 32) (unsigned-byte 8)) (unsigned-byte 8))
+ (ftype (function (psx (unsigned-byte 32) (unsigned-byte 8))
+                  (unsigned-byte 8))
         write-byte*))
 (defun write-byte* (psx address value)
   (let ((address (mask-address address)))
@@ -136,11 +144,16 @@
       (t (error "Byte writes to 0x~8,'0X are unimplemented!~%" address)))))
 
 (declaim
- (ftype (function (psx (unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16))
+ (ftype (function (psx (unsigned-byte 32) (unsigned-byte 16))
+                  (unsigned-byte 16))
         write-half-word*))
 (defun write-half-word* (psx address value)
   (let ((address (mask-address address)))
     (cond
+      ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (format t "Wrote 0x~4,'0x to joypad offset 0x~1,'0x~%"
+               value (mod address +joypad-registers-begin+))
+       0)
       ((in-range +spu-registers-begin+ +spu-registers-size+ address)
        (psx-spu:write-spu-half-word (psx-spu psx)
                                     (mod address +spu-registers-begin+)
@@ -254,6 +267,11 @@
    (psx-cdrom:cdrom-exception-callback (psx-cdrom psx))
    (lambda ()
            (psx-irq::raise-interrupt (psx-irq psx) :cdrom)
+           0))
+  (setf
+   (psx-timers:timers-exception-callback (psx-timers psx))
+   (lambda (keyword)
+           (psx-irq::raise-interrupt (psx-irq psx) keyword)
            0))
   (setf
    (psx-dma:dma-read (psx-dma psx))

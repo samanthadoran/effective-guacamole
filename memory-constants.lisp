@@ -16,7 +16,8 @@
            #:+rom-exception-vector+ #:+ram-size-non-mirrored+
            #:+spu-voice-registers-begin+ #:+spu-voice-registers-size+
            #:+spu-control-registers-begin+ #:+spu-control-registers-size+
-           #:+cdrom-registers-begin+ #:+cdrom-registers-size+))
+           #:+cdrom-registers-begin+ #:+cdrom-registers-size+
+           #:+joypad-registers-begin+ #:+joypad-registers-size+))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
@@ -50,6 +51,9 @@
 (defconstant +irq-registers-begin+ #x1F801070)
 (defconstant +irq-registers-size+ 8)
 
+(defconstant +joypad-registers-begin+ #x1F801040)
+(defconstant +joypad-registers-size+ #x10)
+
 (defconstant +cache-control+ #xFFFE0130)
 
 (defconstant +spu-registers-begin+ #x1F801C00)
@@ -60,6 +64,9 @@
 
 (defconstant +spu-control-registers-begin+ #x1F801D80)
 (defconstant +spu-control-registers-size+ #x40)
+
+(defconstant +data-cache-begin+ #x1F800000)
+(defconstant +data-cache-size+ #x400)
 
 ; Timers seems to be about 0x30 in size, but only has three registers for
 ; each of the four timers? Weird.

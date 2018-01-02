@@ -23,6 +23,10 @@
   (let ((interrupt-index
          (case interrupt
            (:cdrom #x2)
+           (:timer0 #x4)
+           (:timer1 #x5)
+           (:timer2 #x6)
+           (:joypad #x7)
            (otherwise (error "Unrecognized interrupt: ~A~%" interrupt)))))
     (when (ldb-test (byte 1 interrupt-index) (irq-mask irq))
       (setf (irq-status irq)
