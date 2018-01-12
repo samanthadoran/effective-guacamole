@@ -22,6 +22,7 @@
    potentially raise an interrupt."
   (let ((interrupt-index
          (case interrupt
+           (:vblank #x0)
            (:cdrom #x2)
            (:timer0 #x4)
            (:timer1 #x5)

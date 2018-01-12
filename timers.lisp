@@ -52,12 +52,6 @@
                           mode)
                   word-to-mode))
 (defun word-to-mode (word)
-  ; (when (and (ldb-test (byte 1 7) word) (or (ldb-test (byte 1 4) word)
-  ;                                           (ldb-test (byte 1 5) word)))
-  ;   (error "Timer irq wants toggle?~%"))
-  ; (when (and (ldb-test (byte 1 6) word) (or (ldb-test (byte 1 4) word)
-  ;                                           (ldb-test (byte 1 5) word)))
-  ;   (error "Timer irq wants repeat?~%"))
   (make-mode
    :synchronization-enabled (ldb-test (byte 1 0) word)
    :synchronization-mode (ldb (byte 2 1) word)
@@ -83,9 +77,12 @@
   (timers
    (make-array 3
                :element-type 'timer
-               :initial-contents `(,(make-timer :identifier :timer0 :clock-divider 1)
-                                   ,(make-timer :identifier :timer1 :clock-divider 8)
-                                   ,(make-timer :identifier :timer2 :clock-divider 30)))
+               :initial-contents `(,(make-timer :identifier :timer0
+                                                :clock-divider 1)
+                                   ,(make-timer :identifier :timer1
+                                                :clock-divider 8)
+                                   ,(make-timer :identifier :timer2
+                                                :clock-divider 30)))
    :type (simple-array timer (3))))
 
 (declaim (ftype (function (timer)
@@ -103,12 +100,14 @@
                 generate-irq))
 (defun generate-irq (timers timer)
   (if (eql (mode-irq-frequency (timer-mode timer)) :repeat)
-    (progn
-     (setf (mode-fired-irq (timer-mode timer))
-           (not (mode-fired-irq (timer-mode timer))))
-     (unless (mode-fired-irq (timer-mode timer))
-       (when (has-repeat-irq timer)
-         (funcall (timers-exception-callback timers) (timer-identifier timer)))))
+    (when (has-repeat-irq timer)
+      (funcall (timers-exception-callback timers) (timer-identifier timer)))
+    ; (progn
+    ;  (setf (mode-fired-irq (timer-mode timer))
+    ;        (not (mode-fired-irq (timer-mode timer))))
+    ;  (unless (mode-fired-irq (timer-mode timer))
+    ;    (when (has-repeat-irq timer)
+    ;      (funcall (timers-exception-callback timers) (timer-identifier timer)))))
     (when (and (has-irq (timer-mode timer))
                (not (mode-fired-irq (timer-mode timer))))
       (funcall (timers-exception-callback timers) (timer-identifier timer))

@@ -9,7 +9,7 @@
         :cepl.devil
         :memory)
   (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
-           #:read-gpu #:write-gpu))
+           #:read-gpu #:write-gpu #:gpu-exception-callback))
 
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 1)))
@@ -132,7 +132,10 @@
   (display-end-x 0 :type (unsigned-byte 12))
   (display-start-y 0 :type (unsigned-byte 10))
   (display-end-y 0 :type (unsigned-byte 10))
-  (gp0-op (make-gp0-operation) :type gp0-operation))
+  (gp0-op (make-gp0-operation) :type gp0-operation)
+  (exception-callback
+   (lambda () 0)
+   :type (function () (unsigned-byte 8))))
 
 ; TODO(Samantha): Move these into the gpu.
 (defparameter *gpu-list* (list))
@@ -190,6 +193,7 @@
 (defun set-drawing-offset (gpu value)
   ; TODO(Samantha): Move this into VBLANK when implemented.
   (when (car *gpu-list*)
+    (funcall (gpu-exception-callback gpu))
     (draw gpu))
   (let ((x (ldb (byte 11 0) value)) (y (ldb (byte 11 11) value)))
     ; Offsets are (signed-byte 11), peform the conversions if necessary.
@@ -349,17 +353,18 @@
 (defun fill-rectangle (gpu color top-left size)
   (when *debug-gpu*
     (format t "GP0(#x02): fill-rectangle  is not implemented correctly!~%"))
-  (render-opaque-shaded-triangle gpu color top-left
-                                 ; Bottom left
-                                 color (wrap-word (+ top-left (logand #xFFFF0000 size)))
-                                 ; Top Right
-                                 color (wrap-word (+ top-left (logand #x0000FFFF size))))
-                                 ; Top Right
-  (render-opaque-shaded-triangle gpu color (wrap-word (+ top-left (logand #x0000FFFF size)))
-                                  ; Bottom Right
-                                 color (wrap-word (+ top-left size))
-                                 ; Bottom Left
-                                 color (wrap-word (+ top-left (logand #x0000FFFF size))))
+  (let* ((left (logand #x3F0 (ldb (byte 16 0) top-left)))
+         (right (+ left (logand #x3F0 (+ #xF (ldb (byte 16 0) size)))))
+         (top (logand #x1FF (ldb (byte 16 16) top-left)))
+         (bottom (logand #x1FF (logand #xFFFF (+ top (ldb (byte 16 16) size))))))
+    (render-opaque-shaded-triangle gpu
+                                   color (logior left (ash top 16))
+                                   color (logior right (ash top 16))
+                                   color (logior right (ash bottom 16)))
+    (render-opaque-shaded-triangle gpu
+                                   color (logior right (ash bottom 16))
+                                   color (logior left (ash top 16))
+                                   color (logior left (ash bottom 16))))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
@@ -487,11 +492,11 @@
            :current-number-of-arguments 0
            :arguments (list)))
     (when *debug-gpu*
-      (format t "GP0(#x~2,'0x)~%" value)))
+      (format t "GP0(#x~2,'0x)~%" (ldb (byte 8 24) value))))
   0)
 
 (declaim (ftype (function ((unsigned-byte 32))
-                          (simple-array single-float (4)))
+                          (simple-array single-float (3)))
                 word-to-color))
 (defun word-to-color (word)
   (v!
@@ -500,7 +505,7 @@
    (ldb (byte 8 16) word)))
 
 (declaim (ftype (function ((unsigned-byte 32))
-                          (simple-array single-float (4)))
+                          (simple-array single-float (2)))
                 word-to-position))
 (defun word-to-position (word)
   (let ((x (if (ldb-test (byte 1 10) word)
@@ -632,7 +637,7 @@
                 write-gp1))
 (defun write-gp1 (gpu value)
   (when *debug-gpu*
-    (format t "GP1(#x~2,'0x)~%" value))
+    (format t "GP1(#x~2,'0x)~%" (ldb (byte 8 24) value)))
   (case (ldb (byte 8 24) value)
     (#x00 (gpu-soft-reset gpu))
     (#x01 (reset-command-buffer gpu))

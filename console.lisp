@@ -48,6 +48,11 @@
     (console-on my-psx bios-rom-path)
     my-psx))
 
+; TODO(Samantha): Remove this. It's only really useful until we get proper gpu
+; timings, before then, the bios won't continue to render unless it's manually
+; triggered. I don't love the solution, but it seems to be the best at the time.
+(defparameter *trigger-vblank* nil)
+
 (declaim (ftype (function (pathname) (unsigned-byte 32)) setup-and-run))
 (defun setup-and-run (bios-rom-path)
   (let ((psx (make-console bios-rom-path)))
@@ -55,5 +60,8 @@
       do (step-cpu (psx-cpu psx))
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
-      do (psx-timers:advance-timers (psx-timers psx))))
+      do (psx-timers:advance-timers (psx-timers psx))
+      do (when *trigger-vblank*
+           (setf *trigger-vblank* nil)
+           (psx-irq::raise-interrupt (psx-irq psx) :vblank))))
   0)

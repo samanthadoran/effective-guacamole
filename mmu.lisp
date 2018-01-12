@@ -54,6 +54,10 @@
   ; TODO(Samantha): Implement more places, simplify the cond.
   (let ((address (mask-address address)))
     (cond
+      ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (format t "Read from joypad offset 0x~1,'0x~%"
+               (mod address +joypad-registers-begin+))
+       #xFF)
       ((in-range +cdrom-registers-begin+ +cdrom-registers-size+ address)
        (psx-cdrom:read-cdrom-registers (psx-cdrom psx)
                                        (mod address +cdrom-registers-begin+)))
@@ -78,6 +82,10 @@
   ; TODO(Samantha): Implement more places, simplify the cond.
   (let ((address (mask-address address)))
     (cond
+      ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (format t "Read from joypad offset 0x~1,'0x~%"
+               (mod address +joypad-registers-begin+))
+       #xFFFF)
       ((in-range +spu-registers-begin+ +spu-registers-size+ address)
        (psx-spu:read-spu-half-word (psx-spu psx)
                                    (mod address +spu-registers-begin+)))
@@ -97,8 +105,6 @@
 (defun load-word* (psx address)
   ; TODO(Samantha): Implement more places, simplify the cond.
   (let ((address (mask-address address)))
-    (when psx-cpu::*debug-cpu*
-      (format t "Load address is 0x~8,'0x~%" address))
     (cond
       ; BIOS
       ((in-range +bios-begin-address+
@@ -119,7 +125,8 @@
       ((in-range +gpu-registers-begin+ +gpu-registers-size+ address)
        (psx-gpu:read-gpu (psx-gpu psx) (mod address +gpu-registers-begin+)))
       ; Unimplemented.
-      (t (error "Word reads to 0x~8,'0X are unimplemented~%" address)))))
+      (t (error "Word reads to 0x~8,'0X are unimplemented~%"
+                address)))))
 
 ; TODO(Samantha): Figure out a way to fix this shadowing.
 (declaim
@@ -129,6 +136,10 @@
 (defun write-byte* (psx address value)
   (let ((address (mask-address address)))
     (cond
+      ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (format t "Wrote 0x~4,'0x to joypad offset 0x~1,'0x~%"
+               value (mod address +joypad-registers-begin+))
+       0)
       ((in-range +cdrom-registers-begin+ +cdrom-registers-size+ address)
        (psx-cdrom:write-cdrom-registers (psx-cdrom psx)
                                         (mod address +cdrom-registers-begin+)
@@ -267,6 +278,11 @@
    (psx-cdrom:cdrom-exception-callback (psx-cdrom psx))
    (lambda ()
            (psx-irq::raise-interrupt (psx-irq psx) :cdrom)
+           0))
+  (setf
+   (psx-gpu:gpu-exception-callback (psx-gpu psx))
+   (lambda ()
+           (psx-irq::raise-interrupt (psx-irq psx) :vblank)
            0))
   (setf
    (psx-timers:timers-exception-callback (psx-timers psx))
