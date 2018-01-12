@@ -150,7 +150,10 @@
      :operation (or
                  (cadr (gethash masked-opcode instructions))
                  (lambda (cpu instruction)
-                         (error "Illegal instruction! Word: 0x~8,'0x, masked: 0x~6,'0x~%" (instruction-word instruction) (instruction-masked-opcode instruction))
+                         (error "Illegal instruction! Word: 0x~8,'0x, ~
+                                 masked: 0x~6,'0x~%"
+                                (instruction-word instruction)
+                                (instruction-masked-opcode instruction))
                          (trigger-exception cpu :cause :reserved-instruction)
                          (values)))
      :address (cpu-program-counter cpu)
@@ -188,6 +191,7 @@
    (cpu-current-program-counter cpu))
   (setf (cop0:cop0-cause-register (cpu-cop0 cpu))
         (logior
+         (logand #xFFFFFF83 (cop0:cop0-cause-register (cpu-cop0 cpu)))
          (ash
           (case cause
             (:interrupt #x0)
