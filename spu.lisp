@@ -262,6 +262,7 @@
        (#x1A2 (setf (spu-sound-ram-reverb-work-area-start-address spu) value))
        (#x1A4 (setf (spu-sound-ram-irq-address spu) value))
        (#x1A6 (setf (spu-sound-ram-data-transfer-address spu) value))
+       ; TODO(Samantha): Actually write these values to spu ram at the correct address.
        (#x1A8 (setf (spu-sound-ram-data-transfer-fifo spu) value))
        (#x1AA (setf (spu-control spu) value))
        (#x1AC (setf (spu-sound-ram-data-transfer-control spu) value))

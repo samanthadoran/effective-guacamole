@@ -186,7 +186,8 @@
   (trigger-exception cpu :cause :coprocessor-unusable))
 
 (def-i-type gte-nop #xC0200
-  (format t "gte nop?~%"))
+  (when *debug-cpu*
+    (format t "gte nop?~%")))
 
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.
@@ -247,6 +248,8 @@
       (aref (cpu-registers cpu) target-register)))
     ; CAUSE
     (13
+     (unless (zerop (aref (cpu-registers cpu) target-register))
+       (error "Are we actually storing to the cause?~%"))
       (setf
        (cop0:cop0-cause-register (cpu-cop0 cpu))
        (aref (cpu-registers cpu) target-register)))

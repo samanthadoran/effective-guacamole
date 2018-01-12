@@ -247,7 +247,8 @@
                         +gpu-registers-begin+
                         (funcall (dma-read dma) (logand base #x1FFFFC))))
               (otherwise
-               (error "Unhandled DMA channel from-ram: ~A~%" (channel-port channel)))))
+               (error "Unhandled DMA channel from-ram: ~A~%"
+                      (channel-port channel)))))
            (:to-ram
             (case (channel-port channel)
               (:otc
@@ -263,7 +264,8 @@
                             to 0x~8,'0x~%"
                          (logand base #x1FFFFC))))
               (otherwise
-               (error "Unhandled DMA channel to-ram: ~A~%" (channel-port channel)))))
+               (error "Unhandled DMA channel to-ram: ~A~%"
+                      (channel-port channel)))))
            (otherwise
             (error "Invalid DMA direction ~A~%"
                    (channel-control-direction channel-control))))
@@ -281,11 +283,10 @@
       (error "To ram dma linked list transfers are invalid!~%"))
     (loop do
       (let ((header (funcall (dma-read dma) base)))
-        (loop for i from (ldb (byte 8 24) header) downto 1 do
-          (progn
-           (setf base (logand #x1FFFFC (+ 4 base)))
-           (funcall (dma-write dma) +gpu-registers-begin+
-                    (funcall (dma-read dma) base))))
+        (loop for i from (ldb (byte 8 24) header) downto 1
+          do (setf base (logand #x1FFFFC (+ 4 base)))
+          do (funcall (dma-write dma) +gpu-registers-begin+
+                      (funcall (dma-read dma) base)))
         ; TODO(Samantha): Some sources say that the psx only reads the high bit
         ; to test for end of the list.
         (when (or (ldb-test (byte 32 0) (logand header #x800000)) nil)
