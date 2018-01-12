@@ -347,6 +347,48 @@
              is not fully implemented!~%"))
   0)
 
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-opaque-raw-textured-quadrilateral))
+(defun render-opaque-raw-textured-quadrilateral (gpu color1
+                                                     v1 texture-coordinate1-and-palette
+                                                     v2 texture-coordinate2-and-texture-page
+                                                     v3 texture-coordinate3
+                                                     v4 texture-coordinate4)
+  (declare (ignore gpu color1 texture-coordinate1-and-palette
+                   texture-coordinate2-and-texture-page texture-coordinate3
+                   texture-coordinate4))
+  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color #xFF))
+                          (list (word-to-position v2) (word-to-color #xFF))
+                          (list (word-to-position v1) (word-to-color #xFF))
+                          (list (word-to-position v2) (word-to-color #xFF))
+                          (list (word-to-position v3) (word-to-color #xFF))
+                          (list (word-to-position v4) (word-to-color #xFF))
+                          *gpu-list*))
+  (incf *gpu-list-len* 6)
+  (when *debug-gpu*
+    (format t "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
+             is not fully implemented!~%"))
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-variable-sized-opaque-raw-textured-quadrilateral))
+(defun render-variable-sized-opaque-raw-textured-quadrilateral (gpu color
+                                                     v1
+                                                     texcoord-and-palette size)
+  (declare (ignore texcoord-and-palette color))
+  (fill-rectangle gpu #xFF v1 size)
+  (when *debug-gpu*
+    (format t "GP0(#x65): render-variable-sized-opaque-raw-textured-quadrilateral ~
+             is not fully implemented!~%"))
+  0)
+
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
                           (unsigned-byte 32))
                 fill-rectangle))
@@ -451,9 +493,16 @@
       (#x2C
         (setf required-arguments 9)
         (setf operation #'render-opaque-texture-blended-quadrilateral))
+      (#x2D
+        (setf required-arguments 9)
+        (setf operation #'render-opaque-raw-textured-quadrilateral))
       (#xA0
         (setf required-arguments 3)
         (setf operation #'load-image))
+      (#x65
+        (setf required-arguments 4)
+        (setf operation
+              #'render-variable-sized-opaque-raw-textured-quadrilateral))
       (#xC0
         (setf required-arguments 3)
         (setf operation #'save-image))
