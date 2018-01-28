@@ -1,12 +1,8 @@
 (defpackage #:psx-gpu
   (:nicknames #:gpu)
   (:use :cl
-        :cepl
-        :cepl.sdl2
-        :swank
-        :livesupport
-        :cepl.skitter.sdl2
-        :cepl.devil
+        #:cepl
+        #:cepl.skitter.sdl2
         :memory)
   (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
            #:read-gpu #:write-gpu #:gpu-exception-callback))
@@ -132,6 +128,11 @@
   (display-end-x 0 :type (unsigned-byte 12))
   (display-start-y 0 :type (unsigned-byte 10))
   (display-end-y 0 :type (unsigned-byte 10))
+  (vram
+   (make-array #x80000
+               :element-type '(unsigned-byte 24)
+               :initial-element 0)
+   :type (simple-array (unsigned-byte 24) (#x80000)))
   (gp0-op (make-gp0-operation) :type gp0-operation)
   (exception-callback
    (lambda () 0)
@@ -446,6 +447,7 @@
       1f0)
      (our-vert-color vert))))
 
+; TODO(Samantha): Add a texture uniform.
 (defun-g frag-stage ((color :vec3))
   (v! (/ (aref color 0) 255.0)
       (/ (aref color 1) 255.0)
@@ -458,17 +460,31 @@
 
 (defun draw (gpu)
   (with-viewport *viewport*
+    ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
+    ; work from a separate file or if the cepl instance is somehow
+    ; automagically global?
+    (step-host)
+    (when (mouse-button (mouse) mouse.left)
+      (format t "Pressed the mouse!~%"))
+    (when (window-closing (window 0))
+      (error "Finally.~%"))
+    (decay-events)
     (clear)
-    (map-g #'some-pipeline (make-buffer-stream
-                            (make-gpu-array
-                             *gpu-list*
-                             :element-type 'our-vert)
-                            :length *gpu-list-len*
-                            :index-array (make-gpu-array
-                                          (loop for i from 0 to (- *gpu-list-len* 1) collect i)
-                                          :element-type :uint8)
-                            )
-           :offset (v! (gpu-drawing-offset-x gpu) (gpu-drawing-offset-y gpu)))
+    (let* ((vao-indices (make-gpu-array
+                         (loop for i from 0 to (- *gpu-list-len* 1) collect i)
+                         :element-type :uint8))
+           (vao (make-gpu-array
+                 *gpu-list*
+                 :element-type 'our-vert))
+           (buffer-stream (make-buffer-stream
+                           vao
+                           :length *gpu-list-len*
+                           :index-array vao-indices)))
+      (map-g #'some-pipeline buffer-stream
+             :offset (v! (gpu-drawing-offset-x gpu) (gpu-drawing-offset-y gpu)))
+      (free-buffer-stream buffer-stream)
+      (free-gpu-array vao)
+      (free-gpu-array vao-indices))
     (swap)
     (setf *gpu-list* (list))
     (setf *gpu-list-len* 0)))

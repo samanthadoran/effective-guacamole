@@ -8,6 +8,7 @@
                #:cepl.sdl2
                #:swank
                #:livesupport
+               #:skitter
                #:cepl.skitter.sdl2
                #:cepl.devil)
   :serial t
