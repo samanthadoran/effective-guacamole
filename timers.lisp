@@ -138,7 +138,7 @@
 (declaim (ftype (function (timers)) advance-timers))
 (defun advance-timers (timers)
   ; TODO(Samantha): This only takes into account the timers being tied to one
-  ; clock source.
+  ; clock source. It's also the slowest thing in the system.
   (setf (timers-clock timers)
         (logand #xFFFFFFFFFFFFFFFF (1+ (timers-clock timers))))
   (loop for timer being the elements of (timers-timers timers)

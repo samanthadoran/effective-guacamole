@@ -129,10 +129,11 @@
   (display-start-y 0 :type (unsigned-byte 10))
   (display-end-y 0 :type (unsigned-byte 10))
   (vram
-   (make-array #x80000
-               :element-type '(unsigned-byte 24)
+   (make-array #x100000
+               ; TODO(Samantha): Should this be u8 or u16?
+               :element-type '(unsigned-byte 8)
                :initial-element 0)
-   :type (simple-array (unsigned-byte 24) (#x80000)))
+   :type (simple-array (unsigned-byte 8) (#x100000)))
   (gp0-op (make-gp0-operation) :type gp0-operation)
   (exception-callback
    (lambda () 0)
@@ -264,6 +265,14 @@
      (gp0-operation-required-number-of-arguments
       (gpu-gp0-op gpu))
      0))
+  ; TODO(Samantha): We need a way to hold onto this position.
+  ; (write-word-to-byte-array (gpu-vram gpu)
+  ;                           (+ (* ypos #x800) xpos)
+  ;                           value)
+  ; (incf xpos 2)
+  ; (when (>= xpos (+ xsize xbase))
+  ;   (setf xpos 0)
+  ;   (incf ypos))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))

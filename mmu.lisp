@@ -2,51 +2,6 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
-(declaim (ftype (function ((simple-array (unsigned-byte 8))
-                           (unsigned-byte 32)
-                           (unsigned-byte 32))
-                          (unsigned-byte 32))
-                write-word-to-byte-array))
-(defun write-word-to-byte-array (array offset word)
-  (write-half-word-to-byte-array array offset (ldb (byte 16 0) word))
-  (write-half-word-to-byte-array array (+ 2 offset) (ldb (byte 16 16) word))
-  word)
-
-(declaim (ftype (function ((simple-array (unsigned-byte 8))
-                           (unsigned-byte 32)
-                           (unsigned-byte 16))
-                          (unsigned-byte 16))
-                write-half-word-to-byte-array))
-(defun write-half-word-to-byte-array (array offset half-word)
-  (setf
-   (aref array offset)
-   (ldb (byte 8 0) half-word))
-  (setf
-   (aref array (+ 1 offset))
-   (ldb (byte 8 8) half-word))
-  half-word)
-
-; TODO(Samantha): Consider regions in these functions.
-(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
-                          (unsigned-byte 32))
-                read-word-from-byte-array))
-(defun read-word-from-byte-array (array offset)
-  "Performs the necessary shifting to reconstruct a word from a byte-array
-   for general use."
-  (logior
-   (aref array offset)
-   (ash (aref array (+ 1 offset)) 8)
-   (ash (aref array (+ 2 offset)) 16)
-   (ash (aref array (+ 3 offset)) 24)))
-
-(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
-                          (unsigned-byte 16))
-                read-half-word-from-byte-array))
-(defun read-half-word-from-byte-array (array offset)
-  (logior
-   (aref array offset)
-   (ash (aref array (+ 1 offset)) 8)))
-
 (declaim (ftype (function (psx (unsigned-byte 32))
                           (unsigned-byte 8))
                 load-byte*))

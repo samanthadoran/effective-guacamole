@@ -17,7 +17,10 @@
            #:+spu-voice-registers-begin+ #:+spu-voice-registers-size+
            #:+spu-control-registers-begin+ #:+spu-control-registers-size+
            #:+cdrom-registers-begin+ #:+cdrom-registers-size+
-           #:+joypad-registers-begin+ #:+joypad-registers-size+))
+           #:+joypad-registers-begin+ #:+joypad-registers-size+
+           #:write-word-to-byte-array #:write-half-word-to-byte-array
+           #:read-word-from-byte-array #:read-half-word-from-byte-array
+           #:is-cacheable))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 1)))
@@ -103,6 +106,15 @@
     (otherwise :kuseg)))
 
 (declaim (ftype (function ((unsigned-byte 32))
+                          boolean)
+                is-cacheable))
+(defun is-cacheable (address)
+  "Determines whether the given address is cacheable."
+  ; The only cacheable locations are kuseg and kseg0, which
+  ; occur when [31:29] < 5
+  (< (ldb (byte 3 29) address) 5))
+
+(declaim (ftype (function ((unsigned-byte 32))
                           (unsigned-byte 32))
                 mask-address))
 (defun mask-address (address)
@@ -157,3 +169,48 @@
   (if (ldb-test (byte 1 31) to-be-converted)
     (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot to-be-converted))))
     to-be-converted))
+
+(declaim (ftype (function ((simple-array (unsigned-byte 8))
+                           (unsigned-byte 32)
+                           (unsigned-byte 32))
+                          (unsigned-byte 32))
+                write-word-to-byte-array))
+(defun write-word-to-byte-array (array offset word)
+  (write-half-word-to-byte-array array offset (ldb (byte 16 0) word))
+  (write-half-word-to-byte-array array (+ 2 offset) (ldb (byte 16 16) word))
+  word)
+
+(declaim (ftype (function ((simple-array (unsigned-byte 8))
+                           (unsigned-byte 32)
+                           (unsigned-byte 16))
+                          (unsigned-byte 16))
+                write-half-word-to-byte-array))
+(defun write-half-word-to-byte-array (array offset half-word)
+  (setf
+   (aref array offset)
+   (ldb (byte 8 0) half-word))
+  (setf
+   (aref array (+ 1 offset))
+   (ldb (byte 8 8) half-word))
+  half-word)
+
+; TODO(Samantha): Consider regions in these functions.
+(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                read-word-from-byte-array))
+(defun read-word-from-byte-array (array offset)
+  "Performs the necessary shifting to reconstruct a word from a byte-array
+       for general use."
+  (logior
+   (aref array offset)
+   (ash (aref array (+ 1 offset)) 8)
+   (ash (aref array (+ 2 offset)) 16)
+   (ash (aref array (+ 3 offset)) 24)))
+
+(declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
+                          (unsigned-byte 16))
+                    read-half-word-from-byte-array))
+(defun read-half-word-from-byte-array (array offset)
+  (logior
+   (aref array offset)
+   (ash (aref array (+ 1 offset)) 8)))
