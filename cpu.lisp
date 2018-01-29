@@ -51,19 +51,38 @@
   ; Bits [5:0]
   (secondary-operation-code 0 :type (unsigned-byte 6)))
 
+(defstruct cache-line
+  (tag 0 :type (unsigned-byte 19))
+  (instructions-as-words
+   (make-array 4 :element-type '(unsigned-byte 32)
+               :initial-element #xDEADBEEF)
+   :type (simple-array (unsigned-byte 32) (4)))
+  (valid
+   (make-array 4 :element-type 'boolean
+               :initial-element nil)
+   :type (simple-array boolean (4))))
+
 (defstruct cpu
   "A model PSX cpu"
+  (instruction (make-instruction) :type instruction)
+  (cache-lines
+   (make-array 256 :element-type 'cache-line
+               :initial-contents (loop for i from 0 to 255
+                                   collect (make-cache-line)))
+   :type (simple-array cache-line (256)))
   (program-counter 0 :type (unsigned-byte 32))
   ; Used for exceptions exclusively.
   (current-program-counter 0 :type (unsigned-byte 32))
   (next-program-counter 0 :type (unsigned-byte 32))
   (registers
-   (make-array 32 :element-type '(unsigned-byte 32))
+   (make-array 32 :element-type '(unsigned-byte 32)
+               :initial-element 0)
    :type (simple-array (unsigned-byte 32) (32)))
   (pending-load-register 0 :type (unsigned-byte 5))
   (pending-load-value 0 :type (unsigned-byte 32))
   (delay-registers
-   (make-array 32 :element-type '(unsigned-byte 32))
+   (make-array 32 :element-type '(unsigned-byte 32)
+               :initial-element 0)
    :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
@@ -107,10 +126,36 @@
   (setf (aref (cpu-delay-registers cpu) index) value)
   (setf (aref (cpu-delay-registers cpu) 0) 0))
 
+(declaim (ftype (function (cpu) (unsigned-byte 32)) fetch-from-cache))
+(defun fetch-from-cache (cpu)
+  "Fetch an instruction from cache and perform maintenance as necessary."
+  (let* ((instruction-address (cpu-program-counter cpu))
+        (tag (ldb (byte 19 11) instruction-address))
+        (cache-line (aref (cpu-cache-lines cpu)
+                          (ldb (byte 8 4) instruction-address)))
+        (index (ldb (byte 2 2) instruction-address)))
+    (when (or (/= tag (cache-line-tag cache-line))
+              (not (aref (cache-line-valid cache-line) index)))
+      ; A cache miss is expensive! tick here!
+      (loop for i from index to 3
+        ; TODO(Samantha): Support something like this because reading from
+        ; memory takes time.
+        ; do (tick 1)
+        do (setf (aref (cache-line-valid cache-line) i) t)
+        do (setf (aref (cache-line-instructions-as-words cache-line) i)
+                 (funcall (cpu-memory-get-word cpu)
+                          (+
+                           (cpu-program-counter cpu)
+                           (* 4 (ldb (byte 8 4) instruction-address)))))))
+    (aref (cache-line-instructions-as-words cache-line) index)))
+
 (declaim (ftype (function (cpu) (unsigned-byte 32)) fetch))
 (defun fetch (cpu)
   "Retrieves an instruction for execution as a 32 bit word."
-  (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu)))
+  ; TODO(Samantha): Actually read from cache.
+  (if (and nil (is-cacheable (cpu-program-counter cpu)))
+    (fetch-from-cache cpu)
+    (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu))))
 
 (declaim (ftype (function ((unsigned-byte 32))
                           (unsigned-byte 32))
@@ -142,36 +187,51 @@
 (declaim (ftype (function (cpu (unsigned-byte 32)) instruction) decode))
 (defun decode (cpu instruction-as-word)
   "Transforms a 32 bit word into an executable instruction."
-  (let ((masked-opcode (get-masked-opcode instruction-as-word)))
-    (make-instruction
-     :word instruction-as-word
-     :segment (determine-segment (cpu-program-counter cpu))
-     ; If this instruction isn't in our list, make a dummy.
-     :operation (or
-                 (cadr (gethash masked-opcode instructions))
-                 (lambda (cpu instruction)
-                         (error "Illegal instruction! Word: 0x~8,'0x, ~
-                                 masked: 0x~6,'0x~%"
-                                (instruction-word instruction)
-                                (instruction-masked-opcode instruction))
-                         (trigger-exception cpu :cause :reserved-instruction)
-                         (values)))
-     :address (cpu-program-counter cpu)
-     :masked-opcode masked-opcode
-     ; If this instruction isn't in our list, it's illegal!
-     ; TODO(Samantha): Consider special casing b-cond-z so we get more useful
-     ; information.
-     :mnemonic (or
-                (car (gethash masked-opcode instructions))
-                "Illegal Instruction!")
-     :operation-code (ldb (byte 6 26) instruction-as-word)
-     :source-register (ldb (byte 5 21) instruction-as-word)
-     :target-register (ldb (byte 5 16) instruction-as-word)
-     :immediate-value (ldb (byte 16 0) instruction-as-word)
-     :jump-target (ldb (byte 26 0) instruction-as-word)
-     :destination-register (ldb (byte 5 11) instruction-as-word)
-     :shift-amount (ldb (byte 5 6) instruction-as-word)
-     :secondary-operation-code (ldb (byte 6 0) instruction-as-word))))
+  ; It's much faster to edit the existing instruction than to make a new one
+  ; each time, even if it looks messier.
+  (let ((instruction (cpu-instruction cpu))
+        (masked-opcode (get-masked-opcode instruction-as-word)))
+    (setf (instruction-word instruction)
+          instruction-as-word)
+    (setf (instruction-segment instruction)
+          (determine-segment (cpu-program-counter cpu)))
+    ; If this instruction isn't in our list, make a dummy.
+    (setf (instruction-operation instruction)
+          (cadr (gethash masked-opcode instructions
+                         (lambda (cpu instruction)
+                                 (error "Illegal instruction! Word: 0x~8,'0x, ~
+                                         masked: 0x~6,'0x~%"
+                                        (instruction-word instruction)
+                                        (instruction-masked-opcode instruction))
+                                 (trigger-exception cpu :cause :reserved-instruction)
+                                 (values)))))
+    (setf (instruction-address instruction)
+          (cpu-program-counter cpu))
+    (setf (instruction-masked-opcode instruction)
+          masked-opcode)
+    ; If this instruction isn't in our list, it's illegal!
+    ; TODO(Samantha): Consider special casing b-cond-z so we get more useful
+    ; information.
+    (setf (instruction-mnemonic instruction)
+          (car (gethash masked-opcode instructions
+                        "Illegal Instruction!")))
+    (setf (instruction-operation-code instruction)
+          (ldb (byte 6 26) instruction-as-word))
+    (setf (instruction-source-register instruction)
+          (ldb (byte 5 21) instruction-as-word))
+    (setf (instruction-target-register instruction)
+          (ldb (byte 5 16) instruction-as-word))
+    (setf (instruction-immediate-value instruction)
+          (ldb (byte 16 0) instruction-as-word))
+    (setf (instruction-jump-target instruction)
+          (ldb (byte 26 0) instruction-as-word))
+    (setf (instruction-destination-register instruction)
+          (ldb (byte 5 11) instruction-as-word))
+    (setf (instruction-shift-amount instruction)
+          (ldb (byte 5 6) instruction-as-word))
+    (setf (instruction-secondary-operation-code instruction)
+          (ldb (byte 6 0) instruction-as-word))
+    instruction))
 
 (declaim (ftype (function (cpu &key (:cause keyword))
                           (unsigned-byte 32))
@@ -233,15 +293,21 @@
 (defun execute (cpu instruction)
   "Executes a single instruction and returns the number of cycles that this
    took."
-  (set-register cpu (cpu-pending-load-register cpu) (cpu-pending-load-value cpu))
+  (set-register cpu (cpu-pending-load-register cpu)
+                (cpu-pending-load-value cpu))
   (setf (cpu-pending-load-register cpu) 0)
   (setf (cpu-pending-load-value cpu) 0)
-  (if (/= 0 (mod (cpu-current-program-counter cpu) 4))
+  (if (not (zerop (mod (cpu-current-program-counter cpu) 4)))
     (trigger-exception cpu :cause :address-load-error)
     (funcall (instruction-operation instruction) cpu instruction))
   ; Move the registers from the delay slots into the regular ones.
   (setf (cpu-registers cpu) (copy-seq (cpu-delay-registers cpu)))
-  0)
+  ; TODO(Samantha): We need to finally start working with timing. Many (all?)
+  ; of the opcodes take a fixed amount of time with the only variable being
+  ; whether or not they are in cache or you hit a pipeline hazard. So, this
+  ; means that the fetch decode execute cycle (and it's sub components) each
+  ; have a cycle cost. Investigate and implement.
+  1)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
 (defun step-cpu (cpu)
