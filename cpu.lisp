@@ -185,6 +185,17 @@
       (ldb (byte 6 26) instruction-as-word)
       (logior #xFF00 (ldb (byte 6 0) instruction-as-word)))))
 
+(declaim (list *illegal-instruction*))
+(defparameter *illegal-instruction*
+  (list "Illegal Instruction!"
+        (lambda (cpu instruction)
+                (error "Illegal instruction! Word: 0x~8,'0x, ~
+                                       masked: 0x~6,'0x~%"
+                       (instruction-word instruction)
+                       (instruction-masked-opcode instruction))
+                (trigger-exception cpu :cause :reserved-instruction)
+                (values))))
+
 (declaim (ftype (function (cpu (unsigned-byte 32)) instruction) decode))
 (defun decode (cpu instruction-as-word)
   "Transforms a 32 bit word into an executable instruction."
@@ -195,16 +206,7 @@
         (hashed-instruction
          (gethash
           masked-opcode instructions
-          ; Shiny default in the case that we run into an unimplemented
-          ; or otherwise reserved instruction
-          (list "Illegal Instruction!"
-                (lambda (cpu instruction)
-                        (error "Illegal instruction! Word: 0x~8,'0x, ~
-                                                     masked: 0x~6,'0x~%"
-                               (instruction-word instruction)
-                               (instruction-masked-opcode instruction))
-                        (trigger-exception cpu :cause :reserved-instruction)
-                        (values))))))
+          *illegal-instruction*)))
     (setf (instruction-word instruction)
           instruction-as-word)
     (setf (instruction-segment instruction)
@@ -272,8 +274,10 @@
           2)
          (ash
           (if (ldb-test (byte 16 0)
-                        (logand (funcall (cpu-memory-get-word cpu) +irq-registers-begin+)
-                                (funcall (cpu-memory-get-word cpu) (+ +irq-registers-begin+ 4))))
+                        (logand (funcall (cpu-memory-get-word cpu)
+                                         +irq-registers-begin+)
+                                (funcall (cpu-memory-get-word cpu)
+                                         (+ +irq-registers-begin+ 4))))
             1
             0)
           10)))
@@ -303,9 +307,9 @@
                 (cpu-pending-load-value cpu))
   (setf (cpu-pending-load-register cpu) 0)
   (setf (cpu-pending-load-value cpu) 0)
-  (if (not (zerop (mod (cpu-current-program-counter cpu) 4)))
-    (trigger-exception cpu :cause :address-load-error)
-    (funcall (instruction-operation instruction) cpu instruction))
+  (if (zerop (mod (cpu-current-program-counter cpu) 4))
+    (funcall (instruction-operation instruction) cpu instruction)
+    (trigger-exception cpu :cause :address-load-error))
   ; Move the registers from the delay slots into the regular ones.
   (setf (cpu-registers cpu) (copy-seq (cpu-delay-registers cpu)))
   ; TODO(Samantha): We need to finally start working with timing. Many (all?)
