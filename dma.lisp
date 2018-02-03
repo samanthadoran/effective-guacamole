@@ -7,6 +7,7 @@
 (in-package :psx-dma)
 (declaim (optimize (speed 3) (safety 1)))
 
+(declaim (boolean *debug-dma*))
 (defparameter *debug-dma* nil)
 
 (defstruct channel-control

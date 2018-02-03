@@ -10,6 +10,7 @@
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 1)))
 
+(declaim (boolean *debug-gpu*))
 (defparameter *debug-gpu* nil)
 
 ; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
@@ -140,6 +141,8 @@
    :type (function () (unsigned-byte 8))))
 
 ; TODO(Samantha): Move these into the gpu.
+(declaim (list *gpu-list*))
+(declaim ((unsigned-byte 32) *gpu-list-len*))
 (defparameter *gpu-list* (list))
 (defparameter *gpu-list-len* 0)
 
@@ -573,22 +576,28 @@
                           (simple-array single-float (3)))
                 word-to-color))
 (defun word-to-color (word)
-  (v!
-   (ldb (byte 8 0) word)
-   (ldb (byte 8 8) word)
-   (ldb (byte 8 16) word)))
+  (let ((r (* 1.0f0 (ldb (byte 8 0) word)))
+        (g (* 1.0f0 (ldb (byte 8 8) word)))
+        (b (* 1.0f0 (ldb (byte 8 16) word))))
+    ; Explicitly declare this as a single float vec 3 to silence
+    ; optimization notes.
+    (make-array 3 :element-type 'single-float :initial-contents `(,r ,g ,b))))
 
 (declaim (ftype (function ((unsigned-byte 32))
                           (simple-array single-float (2)))
                 word-to-position))
 (defun word-to-position (word)
-  (let ((x (if (ldb-test (byte 1 10) word)
-             (* -1 (logand #x7FF (1+ (lognot (ldb (byte 11 0) word)))))
-             (ldb (byte 11 0) word)))
-        (y (if (ldb-test (byte 1 26) word)
-             (* -1 (logand #x7FF (1+ (lognot (ldb (byte 11 16) word)))))
-             (ldb (byte 11 16) word))))
-    (v! x y)))
+  (let ((x (* 1.0f0
+              (if (ldb-test (byte 1 10) word)
+                (* -1 (logand #x7FF (1+ (lognot (ldb (byte 11 0) word)))))
+                (ldb (byte 11 0) word))))
+        (y (* 1.0f0
+              (if (ldb-test (byte 1 26) word)
+                (* -1 (logand #x7FF (1+ (lognot (ldb (byte 11 16) word)))))
+                (ldb (byte 11 16) word)))))
+    ; Explicitly declare this as a single float vec 2 to silence
+    ; optimization notes.
+    (make-array 2 :element-type 'single-float :initial-contents `(,x ,y))))
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))

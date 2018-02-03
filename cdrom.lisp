@@ -8,6 +8,7 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
+(declaim (boolean *debug-cdrom*))
 (defparameter *debug-cdrom* nil)
 
 (defstruct status-register
@@ -218,7 +219,9 @@
           (setf *skip* (not *skip*)))
         (#x19
           (when (car (cdrom-parameter-fifo cdrom))
-            (unless (= (car (cdrom-parameter-fifo cdrom)) #x20)
+            (unless (=
+                     (the (unsigned-byte 8) (car (cdrom-parameter-fifo cdrom)))
+                     #x20)
               (error "Unrecognized test subfunction #x~2,'0x~%"
                      (car (cdrom-parameter-fifo cdrom))))
             (when *debug-cdrom*

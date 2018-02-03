@@ -9,10 +9,11 @@
            #:power-on #:step-cpu #:trigger-exception))
 
 (in-package :psx-cpu)
-(declaim (optimize (speed 3) (safety 1)))
+(declaim (optimize (speed 3) (safety 0)))
 
 (defvar instructions (make-hash-table :test 'equal))
 
+(declaim (boolean *debug-cpu*))
 (defparameter *debug-cpu* nil)
 
 (defstruct instruction
@@ -189,22 +190,28 @@
   "Transforms a 32 bit word into an executable instruction."
   ; It's much faster to edit the existing instruction than to make a new one
   ; each time, even if it looks messier.
-  (let ((instruction (cpu-instruction cpu))
-        (masked-opcode (get-masked-opcode instruction-as-word)))
+  (let* ((instruction (cpu-instruction cpu))
+        (masked-opcode (get-masked-opcode instruction-as-word))
+        (hashed-instruction
+         (gethash
+          masked-opcode instructions
+          ; Shiny default in the case that we run into an unimplemented
+          ; or otherwise reserved instruction
+          (list "Illegal Instruction!"
+                (lambda (cpu instruction)
+                        (error "Illegal instruction! Word: 0x~8,'0x, ~
+                                                     masked: 0x~6,'0x~%"
+                               (instruction-word instruction)
+                               (instruction-masked-opcode instruction))
+                        (trigger-exception cpu :cause :reserved-instruction)
+                        (values))))))
     (setf (instruction-word instruction)
           instruction-as-word)
     (setf (instruction-segment instruction)
           (determine-segment (cpu-program-counter cpu)))
     ; If this instruction isn't in our list, make a dummy.
     (setf (instruction-operation instruction)
-          (cadr (gethash masked-opcode instructions
-                         (lambda (cpu instruction)
-                                 (error "Illegal instruction! Word: 0x~8,'0x, ~
-                                         masked: 0x~6,'0x~%"
-                                        (instruction-word instruction)
-                                        (instruction-masked-opcode instruction))
-                                 (trigger-exception cpu :cause :reserved-instruction)
-                                 (values)))))
+          (cadr hashed-instruction))
     (setf (instruction-address instruction)
           (cpu-program-counter cpu))
     (setf (instruction-masked-opcode instruction)
@@ -213,8 +220,7 @@
     ; TODO(Samantha): Consider special casing b-cond-z so we get more useful
     ; information.
     (setf (instruction-mnemonic instruction)
-          (car (gethash masked-opcode instructions
-                        "Illegal Instruction!")))
+          (car hashed-instruction))
     (setf (instruction-operation-code instruction)
           (ldb (byte 6 26) instruction-as-word))
     (setf (instruction-source-register instruction)
