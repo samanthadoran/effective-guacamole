@@ -218,12 +218,13 @@
             (funcall (cdrom-exception-callback cdrom)))
           (setf *skip* (not *skip*)))
         (#x19
-          (when (car (cdrom-parameter-fifo cdrom))
+          (unless *skip*
             (unless (=
                      (the (unsigned-byte 8) (car (cdrom-parameter-fifo cdrom)))
                      #x20)
               (error "Unrecognized test subfunction #x~2,'0x~%"
                      (car (cdrom-parameter-fifo cdrom))))
+            (setf *skip* (not *skip*))
             (when *debug-cdrom*
               (format t "Command #x19(#x20): Self Test.~%"))
             (write-response-fifo cdrom #x97)
