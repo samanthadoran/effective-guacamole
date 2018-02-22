@@ -5,7 +5,7 @@
         #:cepl.skitter.sdl2
         :memory)
   (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
-           #:read-gpu #:write-gpu #:gpu-exception-callback))
+           #:read-gpu #:write-gpu #:gpu-exception-callback #:tick-gpu))
 
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 1)))
@@ -44,7 +44,9 @@
   (dma-direction 0 :type (unsigned-byte 2))
   (even-odd-line 0 :type (unsigned-byte 1)))
 
-(declaim (ftype (function (gpu-stat) (unsigned-byte 32)) gpu-stat-to-word))
+(declaim (ftype (function (gpu-stat)
+                          (unsigned-byte 32))
+                gpu-stat-to-word))
 (defun gpu-stat-to-word (gpu-stat)
   (logior
    (gpu-stat-texture-page-x-base gpu-stat)
@@ -60,8 +62,7 @@
    (ash (gpu-stat-texture-disable gpu-stat) 15)
    (ash (gpu-stat-horizontal-resolution-2 gpu-stat) 16)
    (ash (gpu-stat-horizontal-resolution-1 gpu-stat) 17)
-   ; TODO(Samantha): Remove this hack once we properly emulate bit31
-   (logand 0 (ash (gpu-stat-vertical-resolution gpu-stat) 19))
+   (ash (gpu-stat-vertical-resolution gpu-stat) 19)
    (ash (gpu-stat-video-mode gpu-stat) 20)
    (ash (gpu-stat-display-area-color-depth gpu-stat) 21)
    (ash (gpu-stat-vertical-interlace gpu-stat) 22)
@@ -129,6 +130,9 @@
   (display-end-x 0 :type (unsigned-byte 12))
   (display-start-y 0 :type (unsigned-byte 10))
   (display-end-y 0 :type (unsigned-byte 10))
+  (current-scanline 0 :type (unsigned-byte 16))
+  (current-scanline-cycles 0 :type (unsigned-byte 16))
+  (frame-counter 0 :type (unsigned-byte 32))
   (vram
    (make-array #x100000
                ; TODO(Samantha): Should this be u8 or u16?
@@ -196,10 +200,6 @@
                           (unsigned-byte 32))
                 set-drawing-offset))
 (defun set-drawing-offset (gpu value)
-  ; TODO(Samantha): Move this into VBLANK when implemented.
-  (when (car *gpu-list*)
-    (funcall (gpu-exception-callback gpu))
-    (draw gpu))
   (let ((x (ldb (byte 11 0) value)) (y (ldb (byte 11 11) value)))
     ; Offsets are (signed-byte 11), peform the conversions if necessary.
     (when (ldb-test (byte 1 10) x)
@@ -471,35 +471,36 @@
   :fragment (frag-stage :vec3))
 
 (defun draw (gpu)
-  (with-viewport *viewport*
-    ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
-    ; work from a separate file or if the cepl instance is somehow
-    ; automagically global?
-    (step-host)
-    (when (mouse-button (mouse) mouse.left)
-      (format t "Pressed the mouse!~%"))
-    (when (window-closing (window 0))
-      (error "Finally.~%"))
-    (decay-events)
-    (clear)
-    (let* ((vao-indices (make-gpu-array
-                         (loop for i from 0 to (- *gpu-list-len* 1) collect i)
-                         :element-type :uint8))
-           (vao (make-gpu-array
-                 *gpu-list*
-                 :element-type 'our-vert))
-           (buffer-stream (make-buffer-stream
-                           vao
-                           :length *gpu-list-len*
-                           :index-array vao-indices)))
-      (map-g #'some-pipeline buffer-stream
-             :offset (v! (gpu-drawing-offset-x gpu) (gpu-drawing-offset-y gpu)))
-      (free-buffer-stream buffer-stream)
-      (free-gpu-array vao)
-      (free-gpu-array vao-indices))
-    (swap)
-    (setf *gpu-list* (list))
-    (setf *gpu-list-len* 0)))
+  (when (car *gpu-list*)
+    (with-viewport *viewport*
+      ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
+      ; work from a separate file or if the cepl instance is somehow
+      ; automagically global?
+      (step-host)
+      (when (mouse-button (mouse) mouse.left)
+        (format t "Pressed the mouse!~%"))
+      (when (window-closing (window 0))
+        (error "Finally.~%"))
+      (decay-events)
+      (clear)
+      (let* ((vao-indices (make-gpu-array
+                           (loop for i from 0 to (- *gpu-list-len* 1) collect i)
+                           :element-type :uint8))
+             (vao (make-gpu-array
+                   *gpu-list*
+                   :element-type 'our-vert))
+             (buffer-stream (make-buffer-stream
+                             vao
+                             :length *gpu-list-len*
+                             :index-array vao-indices)))
+        (map-g #'some-pipeline buffer-stream
+               :offset (v! (gpu-drawing-offset-x gpu) (gpu-drawing-offset-y gpu)))
+        (free-buffer-stream buffer-stream)
+        (free-gpu-array vao)
+        (free-gpu-array vao-indices))
+      (swap)
+      (setf *gpu-list* (list))
+      (setf *gpu-list-len* 0))))
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
 (defun assign-new-gp0-op (gpu value)
@@ -754,3 +755,33 @@
     (0 (read-gpu-read gpu))
     (4 (gpu-stat-to-word (gpu-gpu-stat gpu)))
     (otherwise (error "Invalid GPU read offset 0x~8,'0x~%" offset))))
+
+(declaim (ftype (function (gpu (unsigned-byte 8)))
+                tick-gpu))
+(defun tick-gpu (gpu cpu-clocks)
+  ; TODO(Samantha): Store the partial cycles somehow.
+  (let ((gpu-cycles (floor (* cpu-clocks (/ 53.69 33.868))))
+        (previous-scanline (gpu-current-scanline gpu)))
+    (setf (gpu-current-scanline gpu)
+          (mod (+ previous-scanline
+                  (if (>= (+ gpu-cycles (gpu-current-scanline-cycles gpu)) 3413)
+                    1
+                    0))
+               263))
+    (setf (gpu-current-scanline-cycles gpu)
+          (mod (+ gpu-cycles (gpu-current-scanline-cycles gpu)) 3413))
+    (setf (gpu-stat-even-odd-line (gpu-gpu-stat gpu))
+          (if (not (<= (gpu-display-start-y gpu) (gpu-current-scanline gpu) (gpu-display-end-y gpu)))
+            0
+            (if (and (ldb-test (byte 1 19) (gpu-stat-to-word (gpu-gpu-stat gpu)))
+                     (ldb-test (byte 1 22) (gpu-stat-to-word (gpu-gpu-stat gpu))))
+              (ldb (byte 1 0) (gpu-frame-counter gpu))
+              (ldb (byte 1 0) (gpu-current-scanline gpu)))))
+    (when (and
+           (<= (gpu-display-start-y gpu) previous-scanline (gpu-display-end-y gpu))
+           (not (<= (gpu-display-start-y gpu) (gpu-current-scanline gpu) (gpu-display-end-y gpu))))
+      (setf (gpu-frame-counter gpu)
+            (wrap-word (1+ (gpu-frame-counter gpu))))
+      (funcall (gpu-exception-callback gpu))
+      (draw gpu)))
+  (values))

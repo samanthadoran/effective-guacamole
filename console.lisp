@@ -59,6 +59,10 @@
   (let ((psx (make-console bios-rom-path)))
     (loop
       do (step-cpu (psx-cpu psx))
+      ; TODO(Samantha): This should take the number of cycles from step-cpu, but
+      ; that just returns 1 for now without taking anything into account. Fix
+      ; this when the cpu is properly generating cycles.
+      do (psx-gpu:tick-gpu (psx-gpu psx) 1)
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
       ; TODO(Samantha): Timers is dog slow, optimize it.

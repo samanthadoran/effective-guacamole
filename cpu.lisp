@@ -241,10 +241,12 @@
           (ldb (byte 6 0) instruction-as-word))
     instruction))
 
+; TODO(Samantha): This should be triggered by irqs through step-cpu by checking cop0.
 (declaim (ftype (function (cpu &key (:cause keyword))
                           (unsigned-byte 32))
                 trigger-exception))
 (defun trigger-exception (cpu &key cause)
+  ; This is basically a pipeline hazard and should stall the cpu, right?
   ; Exception handler address is determined by the 22nd (BEV) bit of
   ; cop0_12 (status register)
   (setf (cpu-program-counter cpu)
