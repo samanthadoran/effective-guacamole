@@ -224,7 +224,6 @@
                      #x20)
               (error "Unrecognized test subfunction #x~2,'0x~%"
                      (car (cdrom-parameter-fifo cdrom))))
-            (setf *skip* (not *skip*))
             (when *debug-cdrom*
               (format t "Command #x19(#x20): Self Test.~%"))
             (write-response-fifo cdrom #x97)
@@ -232,7 +231,8 @@
             (write-response-fifo cdrom #x10)
             (write-response-fifo cdrom #xC2)
             (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
-            (funcall (cdrom-exception-callback cdrom))))
+            (funcall (cdrom-exception-callback cdrom)))
+          (setf *skip* (not *skip*)))
         (otherwise (error "Unhandled CDrom command word #x~2,'0x~%" word)))
       (clear-parameter-fifo cdrom)))
   word)
