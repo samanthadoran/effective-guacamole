@@ -23,14 +23,16 @@
             (address
              (wrap-word (+ (sign-extend immediate)
                            (aref (cpu-registers cpu) source-register)))))
-       (declare (ignorable source-register target-register immediate address))
+       (declare (ignorable address))
        (when *debug-cpu*
-         (format t "#x~8,'0x(~A): ~A $~D $~D #x~4,'0x~%"
+         (format t "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) #x~4,'0x~%"
                  (instruction-address instruction)
                  (instruction-segment instruction)
                  (instruction-mnemonic instruction)
                  target-register
+                 (aref (cpu-registers cpu) target-register)
                  source-register
+                 (aref (cpu-registers cpu) source-register)
                  immediate))
        ,@body)))
 
@@ -39,7 +41,6 @@
     ,name
     ,opcode
     (let ((jump-target (instruction-jump-target instruction)))
-      (declare (ignorable jump-target))
       (when *debug-cpu*
         (format t "#x~8,'0x(~A): ~A #x~6,'0x~%"
                 (instruction-address instruction)
@@ -56,14 +57,16 @@
            (target-register (instruction-target-register instruction))
            (destination-register (instruction-destination-register instruction))
            (shift-amount (instruction-shift-amount instruction)))
-       (declare (ignorable source-register target-register
-                           destination-register shift-amount))
+       (declare (ignorable shift-amount))
        (when *debug-cpu*
-         (format t "#x~8,'0x(~A): ~A $~D $~D $~D~%"
+         (format t "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) $~D(#x~8,'0x)~%"
                  (instruction-address instruction)
                  (instruction-segment instruction)
                  (instruction-mnemonic instruction)
                  destination-register
+                 (aref (cpu-registers cpu) destination-register)
                  source-register
-                 target-register))
+                 (aref (cpu-registers cpu) source-register)
+                 target-register
+                 (aref (cpu-registers cpu) target-register)))
        ,@body)))
