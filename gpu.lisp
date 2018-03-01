@@ -23,7 +23,7 @@
   (draw-to-display-area 0 :type (unsigned-byte 1))
   (set-mask-bit 0 :type (unsigned-byte 1))
   (draw-pixels 0 :type (unsigned-byte 1))
-  (interlace-field 0 :type (unsigned-byte 1))
+  (interlace-field :back :type keyword)
   ; According to nocash, this bit just causes strange effects on the
   ; display on real hardware; ignore?
   (reverse-flag 0 :type (unsigned-byte 1))
@@ -31,9 +31,9 @@
   (horizontal-resolution-2 0 :type (unsigned-byte 1))
   (horizontal-resolution-1 0 :type (unsigned-byte 2))
   (vertical-resolution 0 :type (unsigned-byte 1))
-  (video-mode 0 :type (unsigned-byte 1))
+  (video-mode :ntsc :type keyword)
   (display-area-color-depth 0 :type (unsigned-byte 1))
-  (vertical-interlace 0 :type (unsigned-byte 1))
+  (vertical-interlace nil :type boolean)
   (display-disabled 0 :type (unsigned-byte 1))
   (irq1 0 :type (unsigned-byte 1))
   (dma 0 :type (unsigned-byte 1))
@@ -57,15 +57,24 @@
    (ash (gpu-stat-draw-to-display-area gpu-stat) 10)
    (ash (gpu-stat-set-mask-bit gpu-stat) 11)
    (ash (gpu-stat-draw-pixels gpu-stat) 12)
-   (ash (gpu-stat-interlace-field gpu-stat) 13)
+   (ash (ecase (gpu-stat-interlace-field gpu-stat)
+               (:back 0)
+               (:front 1))
+        13)
    (ash (gpu-stat-reverse-flag gpu-stat) 14)
    (ash (gpu-stat-texture-disable gpu-stat) 15)
    (ash (gpu-stat-horizontal-resolution-2 gpu-stat) 16)
    (ash (gpu-stat-horizontal-resolution-1 gpu-stat) 17)
    (ash (gpu-stat-vertical-resolution gpu-stat) 19)
-   (ash (gpu-stat-video-mode gpu-stat) 20)
+   (ash (ecase (gpu-stat-video-mode gpu-stat)
+               (:ntsc 0)
+               (:pal 1))
+        20)
    (ash (gpu-stat-display-area-color-depth gpu-stat) 21)
-   (ash (gpu-stat-vertical-interlace gpu-stat) 22)
+   (ash (if (gpu-stat-vertical-interlace gpu-stat)
+          1
+          0)
+        22)
    (ash (gpu-stat-display-disabled gpu-stat) 23)
    (ash (gpu-stat-irq1 gpu-stat) 24)
    (ash (gpu-stat-dma gpu-stat) 25)
@@ -74,8 +83,6 @@
    (ash (gpu-stat-ready-to-receive-dma-block gpu-stat) 28)
    (ash (gpu-stat-dma-direction gpu-stat) 29)
    (ash (gpu-stat-even-odd-line gpu-stat) 31)))
-
-; TODO(Samantha): word-to-gpu-stat function.
 
 (defstruct gp0-operation
   (function (lambda (gpu &rest values) (declare (ignore gpu values)) 0)
@@ -133,6 +140,7 @@
   (current-scanline 0 :type (unsigned-byte 16))
   (current-scanline-cycles 0 :type (unsigned-byte 16))
   (frame-counter 0 :type (unsigned-byte 32))
+  (partial-cycles 0f0 :type single-float)
   (vram
    (make-array #x100000
                ; TODO(Samantha): Should this be u8 or u16?
@@ -143,6 +151,14 @@
   (exception-callback
    (lambda () 0)
    :type (function () (unsigned-byte 8))))
+
+(declaim (ftype (function (gpu)
+                          boolean)
+                in-vblank?))
+(defun in-vblank? (gpu)
+  (not (<= (gpu-display-start-y gpu)
+           (gpu-current-scanline gpu)
+           (gpu-display-end-y gpu))))
 
 ; TODO(Samantha): Move these into the gpu.
 (declaim (list *gpu-list*))
@@ -710,9 +726,13 @@
   (let ((gpu-stat (gpu-gpu-stat gpu)))
     (setf (gpu-stat-horizontal-resolution-1 gpu-stat) (ldb (byte 2 0) value))
     (setf (gpu-stat-vertical-resolution gpu-stat) (ldb (byte 1 2) value))
-    (setf (gpu-stat-video-mode gpu-stat) (ldb (byte 1 3) value))
+    (setf (gpu-stat-video-mode gpu-stat)
+          (if (ldb-test (byte 1 3) value)
+            :pal
+            :ntsc))
     (setf (gpu-stat-display-area-color-depth gpu-stat) (ldb (byte 1 4) value))
-    (setf (gpu-stat-vertical-interlace gpu-stat) (ldb (byte 1 5) value))
+    (setf (gpu-stat-vertical-interlace gpu-stat)
+          (ldb-test (byte 1 5) value))
     (setf (gpu-stat-horizontal-resolution-2 gpu-stat) (ldb (byte 1 6) value))
     (setf (gpu-stat-reverse-flag gpu-stat) (ldb (byte 1 7) value))))
 
@@ -756,32 +776,91 @@
     (4 (gpu-stat-to-word (gpu-gpu-stat gpu)))
     (otherwise (error "Invalid GPU read offset 0x~8,'0x~%" offset))))
 
+; TODO(Samantha): While the following two functions _are_ the proper timings,
+; using them causes a mysterious address load error exception. For a working
+; configuration, try 3420 clocks per scanline ntsc and 264 scanlines per frame.
+; FIXME.
+(declaim (ftype (function (gpu)
+                          (unsigned-byte 16))
+                clocks-per-scanline))
+(defun clocks-per-scanline (gpu)
+  "Determines the number of gpu clocks that will pass in one single scanline
+   depending on the video mode being used."
+  (ecase (gpu-stat-video-mode (gpu-gpu-stat gpu))
+         (:ntsc 3413)
+         (:pal 3406)))
+
+(declaim (ftype (function (gpu)
+                          (unsigned-byte 16))
+                lines-per-frame))
+(defun lines-per-frame (gpu)
+  "Determines the number of scanlines that will occur in one full frame
+   (including VBLANKS) depending on the video mode being used."
+  (ecase (gpu-stat-video-mode (gpu-gpu-stat gpu))
+         (:ntsc 263)
+         (:pal 314)))
+
+(declaim (ftype (function (gpu)
+                          single-float)
+                gpu-clock-speed))
+(defun gpu-clock-speed (gpu)
+  "Determines the gpu clock speed in MHz based upon the video mode."
+  (ecase (gpu-stat-video-mode (gpu-gpu-stat gpu))
+         (:ntsc 53.69)
+         (:pal 53.2224)))
+
 (declaim (ftype (function (gpu (unsigned-byte 8)))
                 tick-gpu))
 (defun tick-gpu (gpu cpu-clocks)
-  ; TODO(Samantha): Store the partial cycles somehow.
-  (let ((gpu-cycles (floor (* cpu-clocks (/ 53.69 33.868))))
+  "Updates the GPUs state by stepping it through time equal to a number of
+   given cpu clocks that have occured since the last tick."
+  (incf (gpu-partial-cycles gpu)
+        (* cpu-clocks (/ (gpu-clock-speed gpu) 33.868)))
+  (let ((gpu-cycles (floor (gpu-partial-cycles gpu)))
         (previous-scanline (gpu-current-scanline gpu)))
+    ; We can only work in whole cycles, so store whatever decimal part remains
+    ; for later use.
+    (decf (gpu-partial-cycles gpu)
+          gpu-cycles)
     (setf (gpu-current-scanline gpu)
           (mod (+ previous-scanline
-                  (if (>= (+ gpu-cycles (gpu-current-scanline-cycles gpu)) 3413)
-                    1
-                    0))
-               263))
+                  (floor (+ gpu-cycles
+                            (gpu-current-scanline-cycles gpu))
+                         (clocks-per-scanline gpu)))
+               (lines-per-frame gpu)))
     (setf (gpu-current-scanline-cycles gpu)
-          (mod (+ gpu-cycles (gpu-current-scanline-cycles gpu)) 3413))
+          (mod (+ gpu-cycles
+                  (gpu-current-scanline-cycles gpu))
+               (clocks-per-scanline gpu)))
+    ; The playstation uses this to determine which interlace field it's
+    ; rendering at any given time. As such, when vertical interlacing is off,
+    ; it always stays the same at 0 (:back)
+    (setf (gpu-stat-interlace-field (gpu-gpu-stat gpu))
+          (if (gpu-stat-vertical-interlace (gpu-gpu-stat gpu))
+            (if (evenp (gpu-frame-counter gpu))
+              :back
+              :front)
+            :back))
+    ; The playstation uses this to determine what _visible_ line it is rendering
+    ; at any given moment. when vertical interlace is on, it's rendering two
+    ; frames and as such, the first is all the even lines, the second is all
+    ; the odds.
     (setf (gpu-stat-even-odd-line (gpu-gpu-stat gpu))
-          (if (not (<= (gpu-display-start-y gpu) (gpu-current-scanline gpu) (gpu-display-end-y gpu)))
-            0
-            (if (and (ldb-test (byte 1 19) (gpu-stat-to-word (gpu-gpu-stat gpu)))
-                     (ldb-test (byte 1 22) (gpu-stat-to-word (gpu-gpu-stat gpu))))
-              (ldb (byte 1 0) (gpu-frame-counter gpu))
-              (ldb (byte 1 0) (gpu-current-scanline gpu)))))
-    (when (and
-           (<= (gpu-display-start-y gpu) previous-scanline (gpu-display-end-y gpu))
-           (not (<= (gpu-display-start-y gpu) (gpu-current-scanline gpu) (gpu-display-end-y gpu))))
-      (setf (gpu-frame-counter gpu)
-            (wrap-word (1+ (gpu-frame-counter gpu))))
-      (funcall (gpu-exception-callback gpu))
-      (draw gpu)))
+          (if (and (ldb-test (byte 1 0) (gpu-stat-vertical-resolution (gpu-gpu-stat gpu)))
+                   (gpu-stat-vertical-interlace (gpu-gpu-stat gpu)))
+            (ldb (byte 1 0) (gpu-frame-counter gpu))
+            (ldb (byte 1 0) (gpu-current-scanline gpu))))
+    (when (in-vblank? gpu)
+      ; The playstation uses this to determine visible lines and lines in
+      ; vblank are not visible so we use 0 as a default.
+      (setf (gpu-stat-even-odd-line (gpu-gpu-stat gpu)) 0)
+      ; We only want to trigger an interrupt when we first go into vblank, not
+      ; every time we tick whilst in it.
+      (when (<= (gpu-display-start-y gpu)
+                previous-scanline
+                (gpu-display-end-y gpu))
+        (setf (gpu-frame-counter gpu)
+              (wrap-word (1+ (gpu-frame-counter gpu))))
+        (funcall (gpu-exception-callback gpu))
+        (draw gpu))))
   (values))

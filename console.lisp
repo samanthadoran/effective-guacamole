@@ -48,26 +48,13 @@
     (console-on my-psx bios-rom-path)
     my-psx))
 
-; TODO(Samantha): Remove this. It's only really useful until we get proper gpu
-; timings, before then, the bios won't continue to render unless it's manually
-; triggered. I don't love the solution, but it seems to be the best at the time.
-(declaim (boolean *trigger-vblank*))
-(defparameter *trigger-vblank* nil)
-
 (declaim (ftype (function (pathname) (unsigned-byte 32)) setup-and-run))
 (defun setup-and-run (bios-rom-path)
   (let ((psx (make-console bios-rom-path)))
-    (loop
-      do (step-cpu (psx-cpu psx))
-      ; TODO(Samantha): This should take the number of cycles from step-cpu, but
-      ; that just returns 1 for now without taking anything into account. Fix
-      ; this when the cpu is properly generating cycles.
-      do (psx-gpu:tick-gpu (psx-gpu psx) 1)
+    (loop for cpu-clocks = (step-cpu (psx-cpu psx))
+      do (psx-gpu:tick-gpu (psx-gpu psx) cpu-clocks)
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
       ; TODO(Samantha): Timers is dog slow, optimize it.
-      ; do (psx-timers:advance-timers (psx-timers psx))
-      do (when *trigger-vblank*
-           (setf *trigger-vblank* nil)
-           (psx-irq::raise-interrupt (psx-irq psx) :vblank))))
+      do (psx-timers:advance-timers (psx-timers psx))))
   0)
