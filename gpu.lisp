@@ -23,7 +23,7 @@
   (draw-to-display-area 0 :type (unsigned-byte 1))
   (set-mask-bit 0 :type (unsigned-byte 1))
   (draw-pixels 0 :type (unsigned-byte 1))
-  (interlace-field :back :type keyword)
+  (interlace-field :front :type keyword)
   ; According to nocash, this bit just causes strange effects on the
   ; display on real hardware; ignore?
   (reverse-flag 0 :type (unsigned-byte 1))
@@ -834,13 +834,13 @@
                (clocks-per-scanline gpu)))
     ; The playstation uses this to determine which interlace field it's
     ; rendering at any given time. As such, when vertical interlacing is off,
-    ; it always stays the same at 0 (:back)
+    ; it always stays the same at 1 (:front)
     (setf (gpu-stat-interlace-field (gpu-gpu-stat gpu))
           (if (gpu-stat-vertical-interlace (gpu-gpu-stat gpu))
             (if (evenp (gpu-frame-counter gpu))
-              :back
-              :front)
-            :back))
+              :front
+              :back)
+            :front))
     ; The playstation uses this to determine what _visible_ line it is rendering
     ; at any given moment. when vertical interlace is on, it's rendering two
     ; frames and as such, the first is all the even lines, the second is all
