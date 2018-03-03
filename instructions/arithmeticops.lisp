@@ -15,8 +15,8 @@
   (set-register
    cpu target-register
    (wrap-word
-        (+ (sign-extend immediate)
-           (aref (cpu-registers cpu) source-register)))))
+    (+ (sign-extend immediate)
+       (aref (cpu-registers cpu) source-register)))))
 
 (def-i-type slti #x0A
   (set-register

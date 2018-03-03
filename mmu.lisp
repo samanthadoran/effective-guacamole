@@ -194,7 +194,9 @@
        (format t "Wrote 0x~8,'0x to ram size!~%" value)
        value)
       ((= address +cache-control+)
-       (format t "Wrote 0x~8,'0x to cache control!~%" value)
+       (psx-cache-control:write-cache-control
+        (psx-cpu:cpu-cache-control (psx-cpu psx))
+        value)
        value)
       ((in-range +gpu-registers-begin+ +gpu-registers-size+ address)
        (psx-gpu::write-gpu (psx-gpu psx)

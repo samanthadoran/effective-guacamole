@@ -2,11 +2,12 @@
   (:nicknames #:cpu)
   ; TODO(Samantha): Should I be using :psx-coprocessor0 as well?
   (:use :cl :memory)
-  (:export #:cpu #:make-cpu
+  (:export #:cpu #:make-cpu #:cpu-cache-control
            #:cpu-memory-get-byte #:cpu-memory-set-byte
            #:cpu-memory-get-half-word #:cpu-memory-set-half-word
            #:cpu-memory-get-word #:cpu-memory-set-word
-           #:power-on #:step-cpu #:trigger-exception))
+           #:power-on #:step-cpu #:trigger-exception
+           #:is-cache-isolated))
 
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 0)))
@@ -65,7 +66,10 @@
 
 (defstruct cpu
   "A model PSX cpu"
+  (ticks 0 :type (unsigned-byte 32))
   (instruction (make-instruction) :type instruction)
+  (cache-control (psx-cache-control:make-cache-control)
+                 :type psx-cache-control:cache-control)
   (cache-lines
    (make-array 256 :element-type 'cache-line
                :initial-contents (loop for i from 0 to 255
@@ -127,36 +131,78 @@
   (setf (aref (cpu-delay-registers cpu) index) value)
   (setf (aref (cpu-delay-registers cpu) 0) 0))
 
+(declaim (ftype (function (cpu))
+                invalidate-cache))
+(defun invalidate-cache (cpu)
+  (let* ((instruction-address (instruction-address (cpu-instruction cpu)))
+        (cache-line (aref (cpu-cache-lines cpu)
+                          (ldb (byte 8 4) instruction-address)))
+        (index (ldb (byte 2 2) instruction-address)))
+    (if (psx-cache-control:cache-control-scratchpad-enable-1 (cpu-cache-control cpu))
+      (loop for i from 0 to 3
+        ; TODO(Samantha): Support something like this because reading from
+        ; memory takes time.
+        ; do (tick 1)
+        do (setf (aref (cache-line-valid cache-line) i) nil)
+        do (setf (aref (cache-line-instructions-as-words cache-line) i) 0))
+      (progn
+       (setf (aref (cache-line-valid cache-line) index) nil)
+       (setf (aref (cache-line-instructions-as-words cache-line) index) 0)))
+    (values)))
+
+(declaim (ftype (function (cpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                tick))
+(defun tick (cpu ticks)
+  (setf (cpu-ticks cpu)
+        (wrap-word (+ ticks (cpu-ticks cpu)))))
+
 (declaim (ftype (function (cpu) (unsigned-byte 32)) fetch-from-cache))
 (defun fetch-from-cache (cpu)
   "Fetch an instruction from cache and perform maintenance as necessary."
   (let* ((instruction-address (cpu-program-counter cpu))
-        (tag (ldb (byte 19 11) instruction-address))
+        (tag (ldb (byte 19 12) instruction-address))
         (cache-line (aref (cpu-cache-lines cpu)
                           (ldb (byte 8 4) instruction-address)))
         (index (ldb (byte 2 2) instruction-address)))
     (when (or (/= tag (cache-line-tag cache-line))
               (not (aref (cache-line-valid cache-line) index)))
+      (setf (cache-line-tag cache-line) tag)
+      (tick cpu 3)
+      (loop for i from 0 to 3
+        do (setf (aref (cache-line-valid cache-line) i) nil))
       ; A cache miss is expensive! tick here!
       (loop for i from index to 3
         ; TODO(Samantha): Support something like this because reading from
         ; memory takes time.
-        ; do (tick 1)
+        do (tick cpu 1)
         do (setf (aref (cache-line-valid cache-line) i) t)
         do (setf (aref (cache-line-instructions-as-words cache-line) i)
                  (funcall (cpu-memory-get-word cpu)
                           (+
                            (cpu-program-counter cpu)
-                           (* 4 (ldb (byte 8 4) instruction-address)))))))
+                           (* 4 (- i index)))))))
+    (unless (= (funcall (cpu-memory-get-word cpu)
+                        (cpu-program-counter cpu))
+               (aref (cache-line-instructions-as-words cache-line) index))
+      (format t "in error: Tag is:  #x~8,'0x line is:  #x~8,'0x index is: #x~8,'0x~%"
+              tag
+              (ldb (byte 8 4) instruction-address)
+              index)
+      (error "That's bad. #x~8,'0x. Index is #x~8,'0x~%" instruction-address index))
+    ; (format t "this ever works.~%")
     (aref (cache-line-instructions-as-words cache-line) index)))
 
 (declaim (ftype (function (cpu) (unsigned-byte 32)) fetch))
 (defun fetch (cpu)
   "Retrieves an instruction for execution as a 32 bit word."
   ; TODO(Samantha): Actually read from cache.
-  (if (and nil (is-cacheable (cpu-program-counter cpu)))
+  (if (and (psx-cache-control:cache-control-code-cache-enabled (cpu-cache-control cpu))
+           (is-cacheable (cpu-program-counter cpu)))
     (fetch-from-cache cpu)
-    (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu))))
+    (progn
+     (tick cpu 4)
+     (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu)))))
 
 (declaim (ftype (function ((unsigned-byte 32))
                           (unsigned-byte 32))
@@ -190,9 +236,11 @@
   (list "Illegal Instruction!"
         (lambda (cpu instruction)
                 (error "Illegal instruction! Word: 0x~8,'0x, ~
-                                       masked: 0x~6,'0x~%"
+                        masked: 0x~6,'0x: #x~8,'0x(~A)~%"
                        (instruction-word instruction)
-                       (instruction-masked-opcode instruction))
+                       (instruction-masked-opcode instruction)
+                       (instruction-address instruction)
+                       (instruction-segment instruction))
                 (trigger-exception cpu :cause :reserved-instruction)
                 (values))))
 
@@ -294,7 +342,9 @@
   (when (or (eq cause :address-write-error) (eq cause :address-load-error))
     (setf
      (cop0:cop0-bad-virtual-address-register (cpu-cop0 cpu))
-     (cpu-current-program-counter cpu)))
+     (cpu-current-program-counter cpu))
+    ; These seem to crop up from timing issues.. which is terrifying.
+    (error "This _really_ shouldn't be happening. ~%"))
   ; TODO(Samantha): Understand this mess better.
   (setf
    (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
@@ -319,6 +369,7 @@
   ; whether or not they are in cache or you hit a pipeline hazard. So, this
   ; means that the fetch decode execute cycle (and it's sub components) each
   ; have a cycle cost. Investigate and implement.
+  (tick cpu 1)
   1)
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
@@ -327,9 +378,7 @@
    number of cycles it took."
   ; Always execute the next instruction to appease the branch delay slot
   ; overlords.
-  ; TODO(Samantha): The next instruction after a branch should have the same
-  ; address as the branch instruction itself. Exceptions add another
-  ; complication to this process.
+  (setf (cpu-ticks cpu) 0)
   (let ((instruction (decode cpu (fetch cpu))))
     (setf (cpu-in-branch-delay cpu) nil)
     (when (cpu-branch-opcode cpu)
@@ -339,4 +388,5 @@
     (setf (cpu-program-counter cpu) (cpu-next-program-counter cpu))
     (setf (cpu-next-program-counter cpu)
           (wrap-word (+ 4 (cpu-next-program-counter cpu))))
-    (execute cpu instruction)))
+    (execute cpu instruction)
+    (cpu-ticks cpu)))

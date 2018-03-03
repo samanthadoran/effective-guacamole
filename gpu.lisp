@@ -776,10 +776,6 @@
     (4 (gpu-stat-to-word (gpu-gpu-stat gpu)))
     (otherwise (error "Invalid GPU read offset 0x~8,'0x~%" offset))))
 
-; TODO(Samantha): While the following two functions _are_ the proper timings,
-; using them causes a mysterious address load error exception. For a working
-; configuration, try 3420 clocks per scanline ntsc and 264 scanlines per frame.
-; FIXME.
 (declaim (ftype (function (gpu)
                           (unsigned-byte 16))
                 clocks-per-scanline))
@@ -816,8 +812,10 @@
    given cpu clocks that have occured since the last tick."
   (incf (gpu-partial-cycles gpu)
         (* cpu-clocks (/ (gpu-clock-speed gpu) 33.868)))
-  (let ((gpu-cycles (floor (gpu-partial-cycles gpu)))
-        (previous-scanline (gpu-current-scanline gpu)))
+  (let ((gpu-cycles (truncate (gpu-partial-cycles gpu)))
+        (previous-scanline (gpu-current-scanline gpu))
+        (gpu-stat (gpu-gpu-stat gpu)))
+    (declare ((unsigned-byte 16) gpu-cycles))
     ; We can only work in whole cycles, so store whatever decimal part remains
     ; for later use.
     (decf (gpu-partial-cycles gpu)
@@ -835,8 +833,8 @@
     ; The playstation uses this to determine which interlace field it's
     ; rendering at any given time. As such, when vertical interlacing is off,
     ; it always stays the same at 1 (:front)
-    (setf (gpu-stat-interlace-field (gpu-gpu-stat gpu))
-          (if (gpu-stat-vertical-interlace (gpu-gpu-stat gpu))
+    (setf (gpu-stat-interlace-field gpu-stat)
+          (if (gpu-stat-vertical-interlace gpu-stat)
             (if (evenp (gpu-frame-counter gpu))
               :front
               :back)
@@ -845,15 +843,16 @@
     ; at any given moment. when vertical interlace is on, it's rendering two
     ; frames and as such, the first is all the even lines, the second is all
     ; the odds.
-    (setf (gpu-stat-even-odd-line (gpu-gpu-stat gpu))
-          (if (and (ldb-test (byte 1 0) (gpu-stat-vertical-resolution (gpu-gpu-stat gpu)))
-                   (gpu-stat-vertical-interlace (gpu-gpu-stat gpu)))
+    (setf (gpu-stat-even-odd-line gpu-stat)
+          (if (and (ldb-test (byte 1 0) (gpu-stat-vertical-resolution gpu-stat))
+                   (gpu-stat-vertical-interlace gpu-stat))
             (ldb (byte 1 0) (gpu-frame-counter gpu))
             (ldb (byte 1 0) (gpu-current-scanline gpu))))
     (when (in-vblank? gpu)
       ; The playstation uses this to determine visible lines and lines in
       ; vblank are not visible so we use 0 as a default.
-      (setf (gpu-stat-even-odd-line (gpu-gpu-stat gpu)) 0)
+      (setf (gpu-stat-even-odd-line gpu-stat)
+            0)
       ; We only want to trigger an interrupt when we first go into vblank, not
       ; every time we tick whilst in it.
       (when (<= (gpu-display-start-y gpu)
