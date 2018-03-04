@@ -2,7 +2,8 @@
   (:nicknames #:dma)
   (:use :cl :memory)
   (:export #:dma #:make-dma #:dma-control-register #:dma-interrupt-register
-           #:dma-channels #:get-register #:set-register #:dma-write #:dma-read))
+           #:dma-channels #:get-register #:set-register #:dma-write #:dma-read
+           #:dma-tick))
 
 (in-package :psx-dma)
 (declaim (optimize (speed 3) (safety 1)))
@@ -147,6 +148,9 @@
          (interrupt-register-irq-channel-flags interrupt-register)))))
 
 (defstruct dma
+  (tick
+   (lambda (ticks) (declare (ignore ticks)) (values))
+   :type (function ((unsigned-byte 32))))
   (write
    (lambda (address value) (declare (ignore address)) value)
    :type (function ((unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32)))
@@ -240,6 +244,7 @@
         (channel-control (channel-channel-control channel))
         (base (channel-base channel)))
     (loop for i from remaining downto 1
+      do (funcall (dma-tick dma) 1)
       do (case (channel-control-direction channel-control)
            (:from-ram
             (case (channel-port channel)
@@ -285,6 +290,7 @@
     (loop do
       (let ((header (funcall (dma-read dma) base)))
         (loop for i from (ldb (byte 8 24) header) downto 1
+          do (funcall (dma-tick dma) 1)
           do (setf base (logand #x1FFFFC (+ 4 base)))
           do (funcall (dma-write dma) +gpu-registers-begin+
                       (funcall (dma-read dma) base)))

@@ -805,7 +805,7 @@
          (:ntsc 53.69)
          (:pal 53.2224)))
 
-(declaim (ftype (function (gpu (unsigned-byte 8)))
+(declaim (ftype (function (gpu (unsigned-byte 32)))
                 tick-gpu))
 (defun tick-gpu (gpu cpu-clocks)
   "Updates the GPUs state by stepping it through time equal to a number of

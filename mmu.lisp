@@ -247,6 +247,9 @@
            (psx-irq::raise-interrupt (psx-irq psx) keyword)
            0))
   (setf
+   (psx-dma:dma-tick (psx-dma psx))
+   (lambda (ticks) (psx-cpu:tick (psx-cpu psx) ticks)))
+  (setf
    (psx-dma:dma-read (psx-dma psx))
    (lambda (address) (load-word* psx address)))
   (setf

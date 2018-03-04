@@ -7,7 +7,7 @@
            #:cpu-memory-get-half-word #:cpu-memory-set-half-word
            #:cpu-memory-get-word #:cpu-memory-set-word
            #:power-on #:step-cpu #:trigger-exception
-           #:is-cache-isolated))
+           #:is-cache-isolated #:tick))
 
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 0)))
