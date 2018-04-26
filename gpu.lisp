@@ -3,12 +3,13 @@
   (:use :cl
         #:cepl
         #:cepl.skitter.sdl2
+        #:rtg-math
         :memory)
   (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
            #:read-gpu #:write-gpu #:gpu-exception-callback #:tick-gpu))
 
 (in-package :psx-gpu)
-(declaim (optimize (speed 3) (safety 1)))
+(declaim (optimize (speed 3) (safety 3) (debug 3)))
 
 (declaim (boolean *debug-gpu*))
 (defparameter *debug-gpu* nil)
@@ -42,7 +43,7 @@
   (ready-to-send-vram-to-cpu 1 :type (unsigned-byte 1))
   (ready-to-receive-dma-block 1 :type (unsigned-byte 1))
   (dma-direction 0 :type (unsigned-byte 2))
-  (even-odd-line 0 :type (unsigned-byte 1)))
+  (odd-visible-scanline nil :type boolean))
 
 (declaim (ftype (function (gpu-stat)
                           (unsigned-byte 32))
@@ -82,7 +83,10 @@
    (ash (gpu-stat-ready-to-send-vram-to-cpu gpu-stat) 27)
    (ash (gpu-stat-ready-to-receive-dma-block gpu-stat) 28)
    (ash (gpu-stat-dma-direction gpu-stat) 29)
-   (ash (gpu-stat-even-odd-line gpu-stat) 31)))
+   (ash (if (gpu-stat-odd-visible-scanline gpu-stat)
+          1
+          0)
+        31)))
 
 (defstruct gp0-operation
   (function (lambda (gpu &rest values) (declare (ignore gpu values)) 0)
@@ -147,24 +151,12 @@
                :element-type '(unsigned-byte 8)
                :initial-element 0)
    :type (simple-array (unsigned-byte 8) (#x100000)))
+  (render-list (list) :type list)
+  (render-list-length 0 :type (unsigned-byte 32))
   (gp0-op (make-gp0-operation) :type gp0-operation)
   (exception-callback
    (lambda () 0)
    :type (function () (unsigned-byte 8))))
-
-(declaim (ftype (function (gpu)
-                          boolean)
-                in-vblank?))
-(defun in-vblank? (gpu)
-  (not (<= (gpu-display-start-y gpu)
-           (gpu-current-scanline gpu)
-           (gpu-display-end-y gpu))))
-
-; TODO(Samantha): Move these into the gpu.
-(declaim (list *gpu-list*))
-(declaim ((unsigned-byte 32) *gpu-list-len*))
-(defparameter *gpu-list* (list))
-(defparameter *gpu-list-len* 0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -241,16 +233,15 @@
                           (unsigned-byte 32))
                 render-opaque-monochromatic-quadrilateral))
 (defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
-  (declare (ignore gpu))
   ; TODO(Samantha): Use an index-array instead of copying vertices.
-  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color color))
+  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color color))
                           (list (word-to-position v2) (word-to-color color))
                           (list (word-to-position v1) (word-to-color color))
                           (list (word-to-position v2) (word-to-color color))
                           (list (word-to-position v3) (word-to-color color))
                           (list (word-to-position v4) (word-to-color color))
-                          *gpu-list*))
-  (incf *gpu-list-len* 6)
+                          (gpu-render-list gpu)))
+  (incf (gpu-render-list-length gpu) 6)
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -337,15 +328,14 @@
                           (unsigned-byte 32))
                 render-opaque-shaded-quadrilateral))
 (defun render-opaque-shaded-quadrilateral (gpu color1 v1 color2 v2 color3 v3 color4 v4)
-  (declare (ignore gpu))
-  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color color3))
+  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color color3))
                           (list (word-to-position v2) (word-to-color color2))
                           (list (word-to-position v1) (word-to-color color1))
                           (list (word-to-position v2) (word-to-color color2))
                           (list (word-to-position v3) (word-to-color color3))
                           (list (word-to-position v4) (word-to-color color4))
-                          *gpu-list*))
-  (incf *gpu-list-len* 6)
+                          (gpu-render-list gpu)))
+  (incf (gpu-render-list-length gpu) 6)
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
@@ -360,17 +350,17 @@
                                                         v2 texture-coordinate2-and-texture-page
                                                         v3 texture-coordinate3
                                                         v4 texture-coordinate4)
-  (declare (ignore gpu color1 texture-coordinate1-and-palette
+  (declare (ignore color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
-  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color #xFF))
+  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color #xFF))
                           (list (word-to-position v2) (word-to-color #xFF))
                           (list (word-to-position v1) (word-to-color #xFF))
                           (list (word-to-position v2) (word-to-color #xFF))
                           (list (word-to-position v3) (word-to-color #xFF))
                           (list (word-to-position v4) (word-to-color #xFF))
-                          *gpu-list*))
-  (incf *gpu-list-len* 6)
+                          (gpu-render-list gpu)))
+  (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
     (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
              is not fully implemented!~%"))
@@ -388,17 +378,17 @@
                                                      v2 texture-coordinate2-and-texture-page
                                                      v3 texture-coordinate3
                                                      v4 texture-coordinate4)
-  (declare (ignore gpu color1 texture-coordinate1-and-palette
+  (declare (ignore color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
-  (setf *gpu-list* (list* (list (word-to-position v3) (word-to-color #xFF))
+  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color #xFF))
                           (list (word-to-position v2) (word-to-color #xFF))
                           (list (word-to-position v1) (word-to-color #xFF))
                           (list (word-to-position v2) (word-to-color #xFF))
                           (list (word-to-position v3) (word-to-color #xFF))
                           (list (word-to-position v4) (word-to-color #xFF))
-                          *gpu-list*))
-  (incf *gpu-list-len* 6)
+                          (gpu-render-list gpu)))
+  (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
     (format t "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
              is not fully implemented!~%"))
@@ -444,19 +434,18 @@
                           (unsigned-byte 32))
                 render-opaque-shaded-triangle))
 (defun render-opaque-shaded-triangle (gpu color1 v1 color2 v2 color3 v3)
-  (declare (ignore gpu))
   ; TODO(Samantha): The psx seems to send the vertices in whichever winding
   ; order it so desires. Until a more elegant fix can be figured out, just
   ; render both faces so that it's visible no matter what. Does this mean the
   ; quads might need 12 vertices..?
-  (setf *gpu-list* (list* (list (word-to-position v1) (word-to-color color1))
+  (setf (gpu-render-list gpu) (list* (list (word-to-position v1) (word-to-color color1))
                           (list (word-to-position v2) (word-to-color color2))
                           (list (word-to-position v3) (word-to-color color3))
                           (list (word-to-position v3) (word-to-color color3))
                           (list (word-to-position v2) (word-to-color color2))
                           (list (word-to-position v1) (word-to-color color1))
-                          *gpu-list*))
-  (incf *gpu-list-len* 6)
+                          (gpu-render-list gpu)))
+  (incf (gpu-render-list-length gpu) 6)
   0)
 
 ; TODO(Samantha): These probably should be different types. Offload the type
@@ -482,12 +471,12 @@
       (/ (aref color 2) 255.0)
       0))
 
-(def-g-> some-pipeline ()
+(defpipeline-g some-pipeline ()
   :vertex (vert-stage our-vert)
   :fragment (frag-stage :vec3))
 
 (defun draw (gpu)
-  (when (car *gpu-list*)
+  (when (car (gpu-render-list gpu))
     (with-viewport *viewport*
       ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
       ; work from a separate file or if the cepl instance is somehow
@@ -500,23 +489,24 @@
       (decay-events)
       (clear)
       (let* ((vao-indices (make-gpu-array
-                           (loop for i from 0 to (- *gpu-list-len* 1) collect i)
+                           (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
                            :element-type :uint8))
              (vao (make-gpu-array
-                   *gpu-list*
+                   (gpu-render-list gpu)
                    :element-type 'our-vert))
              (buffer-stream (make-buffer-stream
                              vao
-                             :length *gpu-list-len*
+                             :length (gpu-render-list-length gpu)
                              :index-array vao-indices)))
         (map-g #'some-pipeline buffer-stream
-               :offset (v! (gpu-drawing-offset-x gpu) (gpu-drawing-offset-y gpu)))
+               :offset (v! (gpu-drawing-offset-x gpu)
+                           (gpu-drawing-offset-y gpu)))
         (free-buffer-stream buffer-stream)
         (free-gpu-array vao)
         (free-gpu-array vao-indices))
       (swap)
-      (setf *gpu-list* (list))
-      (setf *gpu-list-len* 0))))
+      (setf (gpu-render-list gpu) (list))
+      (setf (gpu-render-list-length gpu) 0))))
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
 (defun assign-new-gp0-op (gpu value)
@@ -776,88 +766,114 @@
     (4 (gpu-stat-to-word (gpu-gpu-stat gpu)))
     (otherwise (error "Invalid GPU read offset 0x~8,'0x~%" offset))))
 
-(declaim (ftype (function (gpu)
-                          (unsigned-byte 16))
+(declaim (ftype (function (keyword)
+                          (integer 3406 3413))
                 clocks-per-scanline))
-(defun clocks-per-scanline (gpu)
+(defun clocks-per-scanline (video-mode)
   "Determines the number of gpu clocks that will pass in one single scanline
    depending on the video mode being used."
-  (ecase (gpu-stat-video-mode (gpu-gpu-stat gpu))
+  (ecase video-mode
          (:ntsc 3413)
          (:pal 3406)))
 
-(declaim (ftype (function (gpu)
-                          (unsigned-byte 16))
+(declaim (ftype (function (keyword)
+                          (integer 263 314))
                 lines-per-frame))
-(defun lines-per-frame (gpu)
+(defun lines-per-frame (video-mode)
   "Determines the number of scanlines that will occur in one full frame
    (including VBLANKS) depending on the video mode being used."
-  (ecase (gpu-stat-video-mode (gpu-gpu-stat gpu))
+  (ecase video-mode
          (:ntsc 263)
          (:pal 314)))
 
-(declaim (ftype (function (gpu)
+(declaim (ftype (function (keyword)
                           single-float)
                 gpu-clock-speed))
-(defun gpu-clock-speed (gpu)
+(defun gpu-clock-speed (video-mode)
   "Determines the gpu clock speed in MHz based upon the video mode."
-  (ecase (gpu-stat-video-mode (gpu-gpu-stat gpu))
+  (ecase video-mode
          (:ntsc 53.69)
          (:pal 53.2224)))
 
-(declaim (ftype (function (gpu (unsigned-byte 32)))
+(declaim (ftype (function (gpu (unsigned-byte 16))
+                          boolean)
+                line-in-vblank?))
+(defun line-in-vblank? (gpu scanline)
+  "Determines whether or not the gpu is currently in the vertical
+   blanking period."
+  (not
+   (<= (gpu-display-start-y gpu)
+       scanline
+       (gpu-display-end-y gpu))))
+
+(declaim (ftype (function (keyword (unsigned-byte 16))
+                         single-float)
+               cpu-clocks-to-gpu-clocks))
+(defun cpu-clocks-to-gpu-clocks (video-mode cpu-clocks)
+  "Converts cpu clocks into gpu clocks depending on the video mode."
+  (* (/ (gpu-clock-speed video-mode) 33.868) cpu-clocks))
+
+(declaim (ftype (function (gpu (unsigned-byte 16)))
                 tick-gpu))
 (defun tick-gpu (gpu cpu-clocks)
   "Updates the GPUs state by stepping it through time equal to a number of
    given cpu clocks that have occured since the last tick."
   (incf (gpu-partial-cycles gpu)
-        (* cpu-clocks (/ (gpu-clock-speed gpu) 33.868)))
-  (let ((gpu-cycles (truncate (gpu-partial-cycles gpu)))
-        (previous-scanline (gpu-current-scanline gpu))
-        (gpu-stat (gpu-gpu-stat gpu)))
+        (cpu-clocks-to-gpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu)) cpu-clocks))
+  (let* ((gpu-stat (gpu-gpu-stat gpu))
+         (video-mode (gpu-stat-video-mode gpu-stat))
+         (gpu-cycles (truncate (gpu-partial-cycles gpu)))
+         (previous-scanline (gpu-current-scanline gpu)))
     (declare ((unsigned-byte 16) gpu-cycles))
-    ; We can only work in whole cycles, so store whatever decimal part remains
-    ; for later use.
+
+    ; We can only work in whole cycles, so store the remaining
+    ; decimal component.
     (decf (gpu-partial-cycles gpu)
           gpu-cycles)
-    (setf (gpu-current-scanline gpu)
-          (mod (+ previous-scanline
-                  (floor (+ gpu-cycles
-                            (gpu-current-scanline-cycles gpu))
-                         (clocks-per-scanline gpu)))
-               (lines-per-frame gpu)))
-    (setf (gpu-current-scanline-cycles gpu)
-          (mod (+ gpu-cycles
-                  (gpu-current-scanline-cycles gpu))
-               (clocks-per-scanline gpu)))
-    ; The playstation uses this to determine which interlace field it's
-    ; rendering at any given time. As such, when vertical interlacing is off,
-    ; it always stays the same at 1 (:front)
-    (setf (gpu-stat-interlace-field gpu-stat)
-          (if (gpu-stat-vertical-interlace gpu-stat)
-            (if (evenp (gpu-frame-counter gpu))
-              :front
-              :back)
-            :front))
-    ; The playstation uses this to determine what _visible_ line it is rendering
-    ; at any given moment. when vertical interlace is on, it's rendering two
-    ; frames and as such, the first is all the even lines, the second is all
-    ; the odds.
-    (setf (gpu-stat-even-odd-line gpu-stat)
-          (if (and (ldb-test (byte 1 0) (gpu-stat-vertical-resolution gpu-stat))
-                   (gpu-stat-vertical-interlace gpu-stat))
-            (ldb (byte 1 0) (gpu-frame-counter gpu))
-            (ldb (byte 1 0) (gpu-current-scanline gpu))))
-    (when (in-vblank? gpu)
-      ; The playstation uses this to determine visible lines and lines in
-      ; vblank are not visible so we use 0 as a default.
-      (setf (gpu-stat-even-odd-line gpu-stat)
-            0)
-      ; We only want to trigger an interrupt when we first go into vblank, not
-      ; every time we tick whilst in it.
-      (when (<= (gpu-display-start-y gpu)
-                previous-scanline
-                (gpu-display-end-y gpu))
+
+    (let ((scanline-cycles (+ gpu-cycles (gpu-current-scanline-cycles gpu))))
+      (declare ((unsigned-byte 16) scanline-cycles))
+      (setf (gpu-current-scanline-cycles gpu)
+            (mod scanline-cycles (clocks-per-scanline video-mode)))
+      (setf (gpu-current-scanline gpu)
+            (mod
+             (+ previous-scanline
+                (truncate
+                 scanline-cycles
+                 (clocks-per-scanline video-mode)))
+             (lines-per-frame video-mode))))
+
+    (if (gpu-stat-vertical-interlace gpu-stat)
+      (progn
+       (setf (gpu-stat-interlace-field gpu-stat)
+             (if (evenp (gpu-frame-counter gpu))
+               :front
+               :back))
+       ; TODO(Samantha): This should probably be based on the interlace
+       ; field instead of depending directly on the framecounter. Either
+       ; way, I'm not sure which field coresponds to which lines. FIXME.
+       (setf (gpu-stat-odd-visible-scanline gpu-stat)
+             (oddp (gpu-frame-counter gpu))))
+      (progn
+       ; When interlacing is disabled, the Playstation can still
+       ; technically use this value, so it gets set to a default value.
+       (setf (gpu-stat-interlace-field gpu-stat)
+             :front)
+       ; The Playstation uses this to determine what visible scanline
+       ; it is rendering at any given moment. When vertical interlacing is
+       ; on, the Playstation switches between rendering all of the even
+       ; scanlines and then all of the odd scanlines. When it is not on,
+       ; it simply checks whether or not the given scanline is odd.
+       (setf (gpu-stat-odd-visible-scanline gpu-stat)
+             (oddp (gpu-current-scanline gpu)))))
+
+    (when (line-in-vblank? gpu (gpu-current-scanline gpu))
+      ; Lines within VBLANK aren't visible, so this gets set to a falsey value.
+      (setf (gpu-stat-odd-visible-scanline gpu-stat)
+            nil)
+      ; We only want to do things like triggering the VBLANK interrupt and
+      ; drawing the framebuffer on the rising edge.
+      (unless (line-in-vblank? gpu previous-scanline)
         (setf (gpu-frame-counter gpu)
               (wrap-word (1+ (gpu-frame-counter gpu))))
         (funcall (gpu-exception-callback gpu))

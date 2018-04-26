@@ -7,10 +7,12 @@
   :depends-on (#:cepl
                #:cepl.sdl2
                #:swank
+               #:rtg-math.vari
                #:livesupport
                #:skitter
                #:cepl.skitter.sdl2
-               #:cepl.devil)
+               #:cepl.devil
+               #:varjo)
   :serial t
   :components (
                (:file "memory-constants")
