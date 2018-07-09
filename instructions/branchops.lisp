@@ -68,13 +68,13 @@
   ; the background would be much better.
   ; Zero out the exception in the cause register from hardware sources until we
   ; enter another.
+  ; (setf
+  ;  (ldb (byte 1 10) (cop0:cop0-cause-register (cpu-cop0 cpu)))
+  ;  0)
   (setf
-   (ldb (byte 1 10) (cop0:cop0-cause-register (cpu-cop0 cpu)))
-   0)
-  (setf
-   (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
+   (ldb (byte 4 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
    (ldb
-    (byte 6 0)
+    (byte 4 0)
     (ash (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu))) -2))))
 
 (declaim (ftype (function (cpu (unsigned-byte 32)) (unsigned-byte 32))
