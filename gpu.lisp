@@ -234,13 +234,14 @@
                 render-opaque-monochromatic-quadrilateral))
 (defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
   ; TODO(Samantha): Use an index-array instead of copying vertices.
-  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color color))
-                          (list (word-to-position v2) (word-to-color color))
-                          (list (word-to-position v1) (word-to-color color))
-                          (list (word-to-position v2) (word-to-color color))
-                          (list (word-to-position v3) (word-to-color color))
-                          (list (word-to-position v4) (word-to-color color))
-                          (gpu-render-list gpu)))
+  (setf (gpu-render-list gpu)
+        (list* (list (word-to-position v3) (word-to-color color))
+               (list (word-to-position v2) (word-to-color color))
+               (list (word-to-position v1) (word-to-color color))
+               (list (word-to-position v2) (word-to-color color))
+               (list (word-to-position v3) (word-to-color color))
+               (list (word-to-position v4) (word-to-color color))
+               (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   0)
 
@@ -327,14 +328,16 @@
                                (unsigned-byte 32) (unsigned-byte 32))
                           (unsigned-byte 32))
                 render-opaque-shaded-quadrilateral))
-(defun render-opaque-shaded-quadrilateral (gpu color1 v1 color2 v2 color3 v3 color4 v4)
-  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color color3))
-                          (list (word-to-position v2) (word-to-color color2))
-                          (list (word-to-position v1) (word-to-color color1))
-                          (list (word-to-position v2) (word-to-color color2))
-                          (list (word-to-position v3) (word-to-color color3))
-                          (list (word-to-position v4) (word-to-color color4))
-                          (gpu-render-list gpu)))
+(defun render-opaque-shaded-quadrilateral (gpu color1 v1 color2 v2
+                                               color3 v3 color4 v4)
+  (setf (gpu-render-list gpu)
+        (list* (list (word-to-position v3) (word-to-color color3))
+               (list (word-to-position v2) (word-to-color color2))
+               (list (word-to-position v1) (word-to-color color1))
+               (list (word-to-position v2) (word-to-color color2))
+               (list (word-to-position v3) (word-to-color color3))
+               (list (word-to-position v4) (word-to-color color4))
+               (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   0)
 
@@ -353,13 +356,14 @@
   (declare (ignore color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
-  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color #xFF))
-                          (list (word-to-position v2) (word-to-color #xFF))
-                          (list (word-to-position v1) (word-to-color #xFF))
-                          (list (word-to-position v2) (word-to-color #xFF))
-                          (list (word-to-position v3) (word-to-color #xFF))
-                          (list (word-to-position v4) (word-to-color #xFF))
-                          (gpu-render-list gpu)))
+  (setf (gpu-render-list gpu)
+        (list* (list (word-to-position v3) (word-to-color #xFF))
+               (list (word-to-position v2) (word-to-color #xFF))
+               (list (word-to-position v1) (word-to-color #xFF))
+               (list (word-to-position v2) (word-to-color #xFF))
+               (list (word-to-position v3) (word-to-color #xFF))
+               (list (word-to-position v4) (word-to-color #xFF))
+               (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
     (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
@@ -381,13 +385,14 @@
   (declare (ignore color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
-  (setf (gpu-render-list gpu) (list* (list (word-to-position v3) (word-to-color #xFF))
-                          (list (word-to-position v2) (word-to-color #xFF))
-                          (list (word-to-position v1) (word-to-color #xFF))
-                          (list (word-to-position v2) (word-to-color #xFF))
-                          (list (word-to-position v3) (word-to-color #xFF))
-                          (list (word-to-position v4) (word-to-color #xFF))
-                          (gpu-render-list gpu)))
+  (setf (gpu-render-list gpu)
+        (list* (list (word-to-position v3) (word-to-color #xFF))
+               (list (word-to-position v2) (word-to-color #xFF))
+               (list (word-to-position v1) (word-to-color #xFF))
+               (list (word-to-position v2) (word-to-color #xFF))
+               (list (word-to-position v3) (word-to-color #xFF))
+               (list (word-to-position v4) (word-to-color #xFF))
+               (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
     (format t "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
@@ -438,13 +443,14 @@
   ; order it so desires. Until a more elegant fix can be figured out, just
   ; render both faces so that it's visible no matter what. Does this mean the
   ; quads might need 12 vertices..?
-  (setf (gpu-render-list gpu) (list* (list (word-to-position v1) (word-to-color color1))
-                          (list (word-to-position v2) (word-to-color color2))
-                          (list (word-to-position v3) (word-to-color color3))
-                          (list (word-to-position v3) (word-to-color color3))
-                          (list (word-to-position v2) (word-to-color color2))
-                          (list (word-to-position v1) (word-to-color color1))
-                          (gpu-render-list gpu)))
+  (setf (gpu-render-list gpu)
+        (list* (list (word-to-position v1) (word-to-color color1))
+               (list (word-to-position v2) (word-to-color color2))
+               (list (word-to-position v3) (word-to-color color3))
+               (list (word-to-position v3) (word-to-color color3))
+               (list (word-to-position v2) (word-to-color color2))
+               (list (word-to-position v1) (word-to-color color1))
+               (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   0)
 
@@ -617,7 +623,8 @@
       (progn
        (incf (gp0-operation-current-number-of-arguments gp0-op))
        (setf (gp0-operation-arguments gp0-op) (list value))
-       (setf (gp0-operation-arguments-tail gp0-op) (gp0-operation-arguments gp0-op)))
+       (setf (gp0-operation-arguments-tail gp0-op)
+             (gp0-operation-arguments gp0-op)))
       (progn
        (incf (gp0-operation-current-number-of-arguments gp0-op))
        (setf (cdr (gp0-operation-arguments-tail gp0-op))
