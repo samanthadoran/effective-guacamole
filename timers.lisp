@@ -135,14 +135,15 @@
   (generate-irq timers timer)
   0)
 
-(declaim (ftype (function (timers)) advance-timers))
-(defun advance-timers (timers)
+(declaim (ftype (function (timers (unsigned-byte 32))) advance-timers))
+(defun advance-timers (timers cpu-clocks)
   ; TODO(Samantha): This only takes into account the timers being tied to one
   ; clock source. It's also the slowest thing in the system.
-  (setf (timers-clock timers)
-        (logand #xFFFFFFFFFFFFFFFF (1+ (timers-clock timers))))
-  (loop for timer being the elements of (timers-timers timers)
-    do (advance-timer timers timer))
+  (loop for i from 1 to cpu-clocks
+    do (setf (timers-clock timers)
+             (logand #xFFFFFFFFFFFFFFFF (1+ (timers-clock timers))))
+    do (loop for timer being the elements of (timers-timers timers)
+         do (advance-timer timers timer)))
   (values))
 
 (declaim (ftype (function (timers (unsigned-byte 8))
