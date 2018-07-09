@@ -264,11 +264,7 @@
   ; TODO(Samantha): Actually read from cache.
   (if (and (psx-cache-control:cache-control-code-cache-enabled (cpu-cache-control cpu))
            (is-cacheable (cpu-program-counter cpu)))
-    ; (fetch-from-cache cpu)
-    (progn
-     (tick cpu 4)
-     (decode (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu))
-             (cpu-program-counter cpu)))
+    (fetch-from-cache cpu)
     (progn
      (tick cpu 4)
      (decode (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu))
