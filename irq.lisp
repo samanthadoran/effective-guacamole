@@ -29,12 +29,8 @@
            (:timer2 #x6)
            (:joypad #x7)
            (otherwise (error "Unrecognized interrupt: ~A~%" interrupt)))))
-    (when (ldb-test (byte 1 interrupt-index) (irq-mask irq))
-      (setf (irq-status irq)
-            (logior (irq-status irq) (ash 1 interrupt-index)))
-      ; This calls back to the cpu's trigger-exception method and also checks
-      ; if exceptions are disabled by bit 0 of coprocessor 0's status register.
-      (funcall (irq-exception-callback irq)))
+    (setf (irq-status irq)
+          (logior (irq-status irq) (ash 1 interrupt-index)))
     interrupt-index))
 
 (declaim (ftype (function (irq (unsigned-byte 8))

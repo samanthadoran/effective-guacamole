@@ -144,7 +144,6 @@
       (loop for i from 0 to 3
         ; TODO(Samantha): Support something like this because reading from
         ; memory takes time.
-        ; do (tick 1)
         do (tick cpu 1)
         do (setf (aref (cache-line-valid cache-line) i) nil)
         do (setf (aref (cache-line-instructions-as-words cache-line) i)
@@ -194,13 +193,13 @@
 (defparameter *illegal-instruction*
   (list "Illegal Instruction!"
         (lambda (cpu instruction)
+                (trigger-exception cpu :cause :reserved-instruction)
                 (error "Illegal instruction! Word: 0x~8,'0x, ~
                         masked: 0x~6,'0x: #x~8,'0x(~A)~%"
                        (instruction-word instruction)
                        (instruction-masked-opcode instruction)
                        (instruction-address instruction)
                        (instruction-segment instruction))
-                (trigger-exception cpu :cause :reserved-instruction)
                 (values))))
 
 (declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32))
@@ -265,7 +264,11 @@
   ; TODO(Samantha): Actually read from cache.
   (if (and (psx-cache-control:cache-control-code-cache-enabled (cpu-cache-control cpu))
            (is-cacheable (cpu-program-counter cpu)))
-    (fetch-from-cache cpu)
+    ; (fetch-from-cache cpu)
+    (progn
+     (tick cpu 4)
+     (decode (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu))
+             (cpu-program-counter cpu)))
     (progn
      (tick cpu 4)
      (decode (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu))
@@ -316,8 +319,9 @@
   ; Exceptions get a little weird if they are in branch delay slots. Move
   ; back by four to compensate and set the exception in branch delay flag of
   ; the cause register.
+  (setf (ldb (byte 1 31) (cop0:cop0-cause-register (cpu-cop0 cpu))) 0)
   (when (cpu-in-branch-delay cpu)
-    (setf (ldb (byte 31 0) (cop0:cop0-cause-register (cpu-cop0 cpu))) 1)
+    (setf (ldb (byte 1 31) (cop0:cop0-cause-register (cpu-cop0 cpu))) 1)
     (setf (cop0:cop0-epc-register (cpu-cop0 cpu))
           (wrap-word (- (cop0:cop0-epc-register (cpu-cop0 cpu)) 4))))
   ; Only these two causes ever change the bad virtual address register.
@@ -331,6 +335,7 @@
   (setf
    (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
    (ldb (byte 6 0) (ash (cop0:cop0-status-register (cpu-cop0 cpu)) 2)))
+  ; TODO(Samantha): We almost certainly need to fuss with the load delay here?
   (cop0:cop0-status-register (cpu-cop0 cpu)))
 
 (declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
@@ -361,14 +366,24 @@
   ; Always execute the next instruction to appease the branch delay slot
   ; overlords.
   (setf (cpu-ticks cpu) 0)
+  (setf (cpu-in-branch-delay cpu) nil)
+  (when (cpu-branch-opcode cpu)
+    (setf (cpu-branch-opcode cpu) nil)
+    (setf (cpu-in-branch-delay cpu) t))
   (let ((instruction (fetch cpu)))
-    (setf (cpu-in-branch-delay cpu) nil)
-    (when (cpu-branch-opcode cpu)
-      (setf (cpu-branch-opcode cpu) nil)
-      (setf (cpu-in-branch-delay cpu) t))
     (setf (cpu-current-program-counter cpu) (cpu-program-counter cpu))
     (setf (cpu-program-counter cpu) (cpu-next-program-counter cpu))
     (setf (cpu-next-program-counter cpu)
           (wrap-word (+ 4 (cpu-next-program-counter cpu))))
-    (execute cpu instruction)
-    (cpu-ticks cpu)))
+    ; TODO(Samantha): Move this out into irq.lisp
+    ; If there is an irq pending, we can't just continue execution as normal.
+    (if (and
+         (not (zerop (logand
+                      (funcall (cpu-memory-get-half-word cpu)
+                               +irq-registers-begin+)
+                      (funcall (cpu-memory-get-half-word cpu)
+                               (+ +irq-registers-begin+ 4)))))
+         (ldb-test (byte 1 0) (cop0:cop0-status-register (cpu-cop0 cpu))))
+      (trigger-exception cpu :cause :interrupt)
+      (execute cpu instruction)))
+  (cpu-ticks cpu))
