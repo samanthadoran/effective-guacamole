@@ -10,9 +10,9 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
-       (format t "Read from joypad offset 0x~1,'0x~%"
-               (mod address +joypad-registers-begin+))
-       #xFF)
+       (ldb (byte 8 0) (psx-joypads:read-joypads
+                        (psx-joypads psx)
+                        (mod address +joypad-registers-begin+))))
       ((in-range +cdrom-registers-begin+ +cdrom-registers-size+ address)
        (psx-cdrom:read-cdrom-registers (psx-cdrom psx)
                                        (mod address +cdrom-registers-begin+)))
@@ -38,9 +38,9 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
-       (format t "Read from joypad offset 0x~1,'0x~%"
-               (mod address +joypad-registers-begin+))
-       #xFFFF)
+       (ldb (byte 16 0) (psx-joypads:read-joypads
+                         (psx-joypads psx)
+                         (mod address +joypad-registers-begin+))))
       ((in-range +spu-registers-begin+ +spu-registers-size+ address)
        (psx-spu:read-spu-half-word (psx-spu psx)
                                    (mod address +spu-registers-begin+)))
@@ -92,9 +92,10 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
-       (format t "Wrote 0x~4,'0x to joypad offset 0x~1,'0x~%"
-               value (mod address +joypad-registers-begin+))
-       0)
+       (ldb (byte 8 0) (psx-joypads:write-joypads
+                        (psx-joypads psx)
+                        (mod address +joypad-registers-begin+)
+                        value)))
       ((in-range +cdrom-registers-begin+ +cdrom-registers-size+ address)
        (psx-cdrom:write-cdrom-registers (psx-cdrom psx)
                                         (mod address +cdrom-registers-begin+)
@@ -117,9 +118,9 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
-       (format t "Wrote 0x~4,'0x to joypad offset 0x~1,'0x~%"
-               value (mod address +joypad-registers-begin+))
-       0)
+       (psx-joypads:write-joypads (psx-joypads psx)
+                                  (mod address +joypad-registers-begin+)
+                                  value))
       ((in-range +spu-registers-begin+ +spu-registers-size+ address)
        (psx-spu:write-spu-half-word (psx-spu psx)
                                     (mod address +spu-registers-begin+)
@@ -240,6 +241,11 @@
    (psx-gpu:gpu-exception-callback (psx-gpu psx))
    (lambda ()
            (psx-irq::raise-interrupt (psx-irq psx) :vblank)
+           0))
+  (setf
+   (psx-joypads:joypads-exception-callback (psx-joypads psx))
+   (lambda ()
+           (psx-irq::raise-interrupt (psx-irq psx) :joypad)
            0))
   (setf
    (psx-timers:timers-exception-callback (psx-timers psx))

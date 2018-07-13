@@ -13,6 +13,7 @@
   (irq (psx-irq:make-irq) :type psx-irq:irq)
   (timers (psx-timers:make-timers) :type psx-timers:timers)
   (cdrom (psx-cdrom:make-cdrom) :type psx-cdrom:cdrom)
+  (joypads (psx-joypads:make-joypads) :type psx-joypads:joypads)
   (gpu (psx-gpu:make-gpu) :type psx-gpu:gpu)
   (spu (psx-spu:make-spu) :type psx-spu:spu)
   ; TODO(Samantha): I'm not convinced this is going to work out cleanly.
@@ -56,5 +57,6 @@
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
       ; TODO(Samantha): Timers is dog slow, optimize it.
-      do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)))
+      do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)
+      do (psx-joypads:tick-joypads (psx-joypads psx) cpu-clocks)))
   0)
