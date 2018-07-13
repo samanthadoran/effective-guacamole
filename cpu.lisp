@@ -334,7 +334,7 @@
   ; TODO(Samantha): We almost certainly need to fuss with the load delay here?
   (cop0:cop0-status-register (cpu-cop0 cpu)))
 
-(declaim (ftype (function (cpu instruction) (unsigned-byte 8)) execute))
+(declaim (ftype (function (cpu instruction) (unsigned-byte 32)) execute))
 (defun execute (cpu instruction)
   "Executes a single instruction and returns the number of cycles that this
    took."
@@ -352,8 +352,7 @@
   ; whether or not they are in cache or you hit a pipeline hazard. So, this
   ; means that the fetch decode execute cycle (and it's sub components) each
   ; have a cycle cost. Investigate and implement.
-  (tick cpu 1)
-  1)
+  (tick cpu 1))
 
 (declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
 (defun step-cpu (cpu)
