@@ -188,7 +188,7 @@
                 read-joypads))
 (defun read-joypads (joypads offset)
   "Reads a value from a specified offset in the joypad."
-  (let ((value #00000000))
+  (let ((value #x00000000))
     (setf
      value
      (ecase offset
