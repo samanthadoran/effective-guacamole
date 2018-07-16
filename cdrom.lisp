@@ -192,15 +192,6 @@
 (defun remaining-interrupts (cdrom)
   (reduce (lambda (x y) (or x y)) (cdrom-interrupts-pending cdrom)))
 
-; TODO(Samantha): I'm not sure why the psx is double sending commands here, it
-; might have something to do with the fact that I instantaneously finish
-; writing and never set the busy bit? Either way, it seems like every other
-; command should be skipped, but test works for now because when it writes #x19
-; a second time, the parameter fifo is empty and nothing happens. Fix this so
-; this hack isn't required.
-; HERE BE DRAGONS.
-(defparameter *skip* nil)
-
 (declaim (ftype (function (cdrom (unsigned-byte 8))
                           (unsigned-byte 8))
                 write-command-word))
@@ -209,30 +200,26 @@
     (unless (remaining-interrupts cdrom)
       (case word
         (#x1
-          (unless *skip*
-            (when *debug-cdrom*
-              (format t "Command #x1: GetStat~%"))
-            ; TODO(Samantha): Spec out the proper cdrom stat register.
-            (write-response-fifo cdrom #x10)
-            (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
-            (funcall (cdrom-exception-callback cdrom)))
-          (setf *skip* (not *skip*)))
+          (when *debug-cdrom*
+            (format t "Command #x1: GetStat~%"))
+          ; TODO(Samantha): Spec out the proper cdrom stat register.
+          (write-response-fifo cdrom #x10)
+          (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
+          (funcall (cdrom-exception-callback cdrom)))
         (#x19
-          (unless *skip*
-            (unless (=
-                     (the (unsigned-byte 8) (car (cdrom-parameter-fifo cdrom)))
-                     #x20)
-              (error "Unrecognized test subfunction #x~2,'0x~%"
-                     (car (cdrom-parameter-fifo cdrom))))
-            (when *debug-cdrom*
-              (format t "Command #x19(#x20): Self Test.~%"))
-            (write-response-fifo cdrom #x97)
-            (write-response-fifo cdrom #x01)
-            (write-response-fifo cdrom #x10)
-            (write-response-fifo cdrom #xC2)
-            (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
-            (funcall (cdrom-exception-callback cdrom)))
-          (setf *skip* (not *skip*)))
+          (unless (=
+                   (the (unsigned-byte 8) (car (cdrom-parameter-fifo cdrom)))
+                   #x20)
+            (error "Unrecognized test subfunction #x~2,'0x~%"
+                   (car (cdrom-parameter-fifo cdrom))))
+          (when *debug-cdrom*
+            (format t "Command #x19(#x20): Self Test.~%"))
+          (write-response-fifo cdrom #x97)
+          (write-response-fifo cdrom #x01)
+          (write-response-fifo cdrom #x10)
+          (write-response-fifo cdrom #xC2)
+          (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
+          (funcall (cdrom-exception-callback cdrom)))
         (otherwise (error "Unhandled CDrom command word #x~2,'0x~%" word)))
       (clear-parameter-fifo cdrom)))
   word)
