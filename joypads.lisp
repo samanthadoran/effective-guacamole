@@ -83,7 +83,7 @@
 
 (defstruct joypad-control
   (transfer-enabled nil :type boolean)
-  (joypad-output :high :type keyword)
+  (joypad-output nil :type boolean)
   ; TODO(Samantha): Understand this field.
   (receive-enable 0 :type (unsigned-byte 1))
   (receive-interrupt-mode 0 :type (unsigned-byte 2))
@@ -99,22 +99,32 @@
   "Converts joypad-control from a structure to its binary representation."
   (logior #x0000
           (ash (if (joypad-control-transfer-enabled joy-control) 1 0) 0)
-          (ash (if (joypad-control-transfer-enabled joy-control) 1 0) 1)
-          (ash (if (joypad-control-transfer-enabled joy-control) 1 0) 2)
+          (ash (if (joypad-control-joypad-output joy-control) 1 0) 1)
+          (ash (if (joypad-control-receive-enable joy-control) 1 0) 2)
           (ash (joypad-control-receive-interrupt-mode joy-control) 8)
           (ash (if (joypad-control-transfer-interrupt-enable joy-control) 1 0) 10)
           (ash (if (joypad-control-receive-interrupt-enable joy-control) 1 0) 11)
           (ash (if (joypad-control-ack-interrupt-enable joy-control) 1 0) 12)
           (ash (joypad-control-desired-slot-number joy-control) 13)))
 
+; TODO(Samantha): Remove this once skitter controls this inputs.
+(declaim (boolean *skip*))
+(defparameter *skip* nil)
+
 (defstruct controller
   "Hold the information related to a specific controller and its current state."
   ; TODO(Samantha): This is currently just the ID for a Digital Pad, it
   ; should be changeable.
   (id #x5A41 :type (unsigned-byte 16))
+  (receive-queue (list) :type list)
   ; TODO(Samantha): Hook this up to skitter and use an actual controller.
   (button-status-callback
-   (lambda () #x0000)
+   (lambda () (progn
+               ; Attempt to press x each alternating call?
+               (setf *skip* (not *skip*))
+               (if *skip*
+                 #xFFFF
+                 #xBFFF)))
    :type (function () (unsigned-byte 16))))
 
 (defun make-receive-queue (controller)
@@ -133,13 +143,12 @@
   "Simple container for the controllers and memory cards."
   ; We only want to fire interrupts on the rising edge, so keep a flag.
   (fired-interrupt nil :type boolean)
-  ; TODO(Samantha): Actually properly switch between these.
-  (controller-1 (make-controller) :type controller)
-  (controller-2 (make-controller) :type controller)
-  ; We need two items here because double reading the receive queue should not
-  ; just move us further into the response.
+  (controllers
+   (make-array 2 :element-type 'controller
+               :initial-contents `(,(make-controller)
+                                   ,(make-controller)))
+   :type (simple-array controller (2)))
   (current-receive-item #xFF :type (unsigned-byte 8))
-  (receive-queue (list) :type list)
   ; Offset #x4, read only.
   (joy-stat (make-joypad-status) :type joypad-status)
   ; Offset #x8, read/write.
@@ -175,7 +184,7 @@
     nil)
   (make-joypad-control
    :transfer-enabled (ldb-test (byte 1 0) value)
-   :joypad-output (ecase (ldb (byte 1 1) value) (0 :high) (1 :low))
+   :joypad-output (ldb-test (byte 1 1) value)
    :receive-enable (ldb (byte 1 2) value)
    :receive-interrupt-mode (ldb (byte 2 8) value)
    :transfer-interrupt-enable (ldb-test (byte 1 10) value)
@@ -193,7 +202,8 @@
      value
      (ecase offset
             ; Receive data from controller
-            (0 (setf (joypad-status-receive-queue-empty (joypads-joy-stat joypads))
+            (0 (setf (joypad-status-receive-queue-empty (joypads-joy-stat
+                                                         joypads))
                      t)
                (joypads-current-receive-item joypads))
             (4 (joypad-status-to-word (joypads-joy-stat joypads)))
@@ -213,24 +223,39 @@
     (format t "Wrote 0x~4,'0x to joypads at offset 0x~1,'0x~%" value offset))
   (case offset
     (#x0
-      ; We finished the previous response and need to start a new one.
-      (unless (car (joypads-receive-queue joypads))
-        (setf (joypads-receive-queue joypads)
-              (make-receive-queue (joypads-controller-1 joypads))))
-      ; Keep track of the current item in the receive queue
+      ; TODO(Samantha): The console seems to only trying to be
+      ; start communication with the controller and is only sending #x01. FIXME?
+      (unless (= value #x1)
+        (error "The value _wasn't 1?~%"))
+      ; Dummy response if output is disabled. All buttons released.
       (setf (joypads-current-receive-item joypads)
-            (car (joypads-receive-queue joypads)))
-      ; Move through the response to the next item.
-      (setf (joypads-receive-queue joypads)
-            (cdr (joypads-receive-queue joypads)))
+            #xFF)
       ; Writing to TX will get us data no matter what.
       (setf (joypad-status-receive-queue-empty (joypads-joy-stat joypads))
             nil)
-      ; As long as there is more left in the response, we fire IRQ7 to ask
-      ; for more data.
-      (when (car (joypads-receive-queue joypads))
-        (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads))
-              t)))
+      (when (joypad-control-joypad-output (joypads-joy-ctrl joypads))
+        (let ((controller
+               (aref (joypads-controllers joypads)
+                     (joypad-control-desired-slot-number (joypads-joy-ctrl
+                                                          joypads)))))
+          ; We finished the previous response and need to start a new one.
+          (unless (car (controller-receive-queue controller))
+            (setf (controller-receive-queue controller)
+                  (make-receive-queue controller)))
+          ; Keep track of the current item in the receive queue
+          (setf (joypads-current-receive-item joypads)
+                (car (controller-receive-queue controller)))
+          ; Move through the response to the next item.
+          (setf (controller-receive-queue controller)
+                (cdr (controller-receive-queue controller)))
+          ; As long as there is more left in the response, we fire IRQ7 to ask
+          ; for more data.
+          (when (and
+                 (joypad-control-receive-interrupt-enable (joypads-joy-ctrl
+                                                           joypads))
+                 (car (controller-receive-queue controller)))
+            (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads))
+                  t)))))
     (#x8 (setf (joypads-joy-mode joypads)
                (word-to-joypad-mode value)))
     (#xA (setf (joypads-joy-ctrl joypads)
