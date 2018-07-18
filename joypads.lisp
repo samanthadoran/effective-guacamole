@@ -124,7 +124,7 @@
                (setf *skip* (not *skip*))
                (if *skip*
                  #xFFFF
-                 #xBFFF)))
+                 #xFFFF)))
    :type (function () (unsigned-byte 16))))
 
 (defun make-receive-queue (controller)
@@ -143,6 +143,7 @@
   "Simple container for the controllers and memory cards."
   ; We only want to fire interrupts on the rising edge, so keep a flag.
   (fired-interrupt nil :type boolean)
+  (write-queue (list) :type list)
   (controllers
    (make-array 2 :element-type 'controller
                :initial-contents `(,(make-controller)
@@ -223,39 +224,11 @@
     (format t "Wrote 0x~4,'0x to joypads at offset 0x~1,'0x~%" value offset))
   (case offset
     (#x0
+      (setf (joypads-write-queue joypads) (list value))
       ; TODO(Samantha): The console seems to only trying to be
       ; start communication with the controller and is only sending #x01. FIXME?
       (unless (= value #x1)
-        (error "The value _wasn't 1?~%"))
-      ; Dummy response if output is disabled. All buttons released.
-      (setf (joypads-current-receive-item joypads)
-            #xFF)
-      ; Writing to TX will get us data no matter what.
-      (setf (joypad-status-receive-queue-empty (joypads-joy-stat joypads))
-            nil)
-      (when (joypad-control-joypad-output (joypads-joy-ctrl joypads))
-        (let ((controller
-               (aref (joypads-controllers joypads)
-                     (joypad-control-desired-slot-number (joypads-joy-ctrl
-                                                          joypads)))))
-          ; We finished the previous response and need to start a new one.
-          (unless (car (controller-receive-queue controller))
-            (setf (controller-receive-queue controller)
-                  (make-receive-queue controller)))
-          ; Keep track of the current item in the receive queue
-          (setf (joypads-current-receive-item joypads)
-                (car (controller-receive-queue controller)))
-          ; Move through the response to the next item.
-          (setf (controller-receive-queue controller)
-                (cdr (controller-receive-queue controller)))
-          ; As long as there is more left in the response, we fire IRQ7 to ask
-          ; for more data.
-          (when (and
-                 (joypad-control-receive-interrupt-enable (joypads-joy-ctrl
-                                                           joypads))
-                 (car (controller-receive-queue controller)))
-            (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads))
-                  t)))))
+        (error "The value _wasn't 1?~%")))
     (#x8 (setf (joypads-joy-mode joypads)
                (word-to-joypad-mode value)))
     (#xA (setf (joypads-joy-ctrl joypads)
@@ -273,20 +246,65 @@
   (declare (ignore joypads))
   (* 1.0 cpu-clocks))
 
+(declaim ((unsigned-byte 32) *ticks*))
+(defparameter *ticks* 0)
+
+(declaim (ftype (function (joypads))
+                update-transmission))
+(defun update-transmission (joypads)
+  "Send and receive data."
+  (setf (joypads-current-receive-item joypads)
+        #xFF)
+  (when (car (joypads-write-queue joypads))
+    (setf (joypads-write-queue joypads) (list))
+    ; Writing to TX will get us data no matter what
+    (setf (joypad-status-receive-queue-empty (joypads-joy-stat joypads))
+          nil)
+    (when (joypad-control-joypad-output (joypads-joy-ctrl joypads))
+      (let ((controller
+             (aref (joypads-controllers joypads)
+                   (joypad-control-desired-slot-number (joypads-joy-ctrl
+                                                        joypads)))))
+        ; We finished the previous response and need to start a new one.
+        (unless (car (controller-receive-queue controller))
+          (setf (controller-receive-queue controller)
+                (make-receive-queue controller)))
+        ; Keep track of the current item in the receive queue
+        (setf (joypads-current-receive-item joypads)
+              (car (controller-receive-queue controller)))
+        ; Move through the response to the next item.
+        (setf (controller-receive-queue controller)
+              (cdr (controller-receive-queue controller)))
+        ; As long as there is more left in the response, we fire IRQ7 to ask
+        ; for more data.
+        (when (and
+               (joypad-control-receive-interrupt-enable (joypads-joy-ctrl
+                                                         joypads))
+               (car (controller-receive-queue controller)))
+          (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads))
+                t)))))
+  (values))
+
 (declaim (ftype (function (joypads (unsigned-byte 16)))
                 tick-joypads))
 (defun tick-joypads (joypads cpu-clocks)
   "Steps joypad clocks forward according to specified number of cpu clocks."
   ; TODO(Samantha): Implement.
-  (cpu-clocks-to-joypad-clocks joypads cpu-clocks)
   ; TODO(Samantha): Not certain I understand the interrupt conditions
   ; for the controller. Does it just wait until the console reads, or does
   ; pressing a button on the controller actually trigger an interrupt?
   ; This is edge triggered, so we keep a status flag in joypads to determine
   ; whether or not we fired it yet.
-  (when (and (not (joypads-fired-interrupt joypads))
-             (joypad-status-has-irq-7 (joypads-joy-stat joypads)))
-    (setf (joypads-fired-interrupt joypads)
-          t)
-    (funcall (joypads-exception-callback joypads)))
+  (cpu-clocks-to-joypad-clocks joypads cpu-clocks)
+  ; TODO(Samantha): This timing is wrong and just awful.
+  (incf *ticks* cpu-clocks)
+  (when (> *ticks* 1000)
+    (update-transmission joypads)
+    ; TODO(Samantha): Use decf 100 instead?
+    (setf *ticks* 0)
+    (when (and (not (joypads-fired-interrupt joypads))
+               (joypad-status-has-irq-7 (joypads-joy-stat joypads)))
+      (setf (joypads-fired-interrupt joypads)
+            t)
+      (funcall (joypads-exception-callback joypads))))
   (values))
