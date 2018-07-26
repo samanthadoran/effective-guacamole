@@ -255,6 +255,13 @@
              (because texture cache is not implemented)!~%"))
   value)
 
+; TODO(Samantha): Move load-image-word into a lamba within load-image so these
+; can just be closed over.
+(defparameter *xpos* 0)
+(defparameter *xsize* 0)
+(defparameter *xbase* 0)
+(defparameter *ypos* 0)
+
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))
                 load-image-word))
@@ -272,25 +279,26 @@
      (setf (gp0-operation-required-number-of-arguments (gpu-gp0-op gpu)) 1))
     ; Setting this to 0 allows for the next word sent
     ; to GP0 to resume normally opcode decoding.
-    (setf
-     (gp0-operation-required-number-of-arguments
-      (gpu-gp0-op gpu))
-     0))
+    (progn
+     (setf
+      (gp0-operation-required-number-of-arguments
+       (gpu-gp0-op gpu))
+      0)))
   ; TODO(Samantha): We need a way to hold onto this position.
-  ; (write-word-to-byte-array (gpu-vram gpu)
-  ;                           (+ (* ypos #x800) xpos)
-  ;                           value)
-  ; (incf xpos 2)
-  ; (when (>= xpos (+ xsize xbase))
-  ;   (setf xpos 0)
-  ;   (incf ypos))
+  (write-word-to-byte-array (gpu-vram gpu)
+                            (+ (* *ypos* #x800) *xpos*)
+                            value)
+  (incf *xpos* 4)
+  (when (>= *xpos* (+ *xsize* *xbase*))
+    (setf *xpos* *xbase*)
+    (incf *ypos*))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
                           (unsigned-byte 32))
                 load-image))
 (defun load-image (gpu command coordinates size)
-  (declare (ignore command coordinates))
+  (declare (ignore command))
   (when *debug-gpu*
     (format t "GP0(#xA0): load-image is not fully implemented!~%"))
   (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))
@@ -304,6 +312,10 @@
   ; Create a fake GP0-operation that will load the pixels into vram one by one.
   ; This bypasses needing to inspect GP0(#xA0) to determine the number of
   ; arguments we would need.
+  (setf *xsize* (* 2 (ldb (byte 16 0) size)))
+  (setf *xbase* (* 2 (ldb (byte 16 0) coordinates)))
+  (setf *xpos* *xbase*)
+  (setf *ypos* (ldb (byte 16 16) coordinates))
   (setf (gpu-gp0-op gpu)
         (make-gp0-operation
          :function #'load-image-word
@@ -396,6 +408,35 @@
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
     (format t "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
+             is not fully implemented!~%"))
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32) (unsigned-byte 32)
+                               (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-semi-transparent-raw-textured-quadrilateral))
+(defun render-semi-transparent-raw-textured-quadrilateral (gpu color1
+                                                               v1 texture-coordinate1-and-palette
+                                                               v2 texture-coordinate2-and-texture-page
+                                                               v3 texture-coordinate3
+                                                               v4 texture-coordinate4)
+  (declare (ignore color1 texture-coordinate1-and-palette
+                   texture-coordinate2-and-texture-page texture-coordinate3
+                   texture-coordinate4))
+  (setf (gpu-render-list gpu)
+        (list* (list (word-to-position v3) (word-to-color #xFF))
+               (list (word-to-position v2) (word-to-color #xFF))
+               (list (word-to-position v1) (word-to-color #xFF))
+               (list (word-to-position v2) (word-to-color #xFF))
+               (list (word-to-position v3) (word-to-color #xFF))
+               (list (word-to-position v4) (word-to-color #xFF))
+               (gpu-render-list gpu)))
+  (incf (gpu-render-list-length gpu) 6)
+  (when *debug-gpu*
+    (format t "GP0(#x2F): render-semi-transparent-raw-textured-quadrilateral ~
              is not fully implemented!~%"))
   0)
 
@@ -537,6 +578,9 @@
       (#x2D
         (setf required-arguments 9)
         (setf operation #'render-opaque-raw-textured-quadrilateral))
+      (#x2F
+        (setf required-arguments 9)
+        (setf operation #'render-semi-transparent-raw-textured-quadrilateral))
       (#xA0
         (setf required-arguments 3)
         (setf operation #'load-image))
