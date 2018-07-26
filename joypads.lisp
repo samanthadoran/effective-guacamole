@@ -86,7 +86,7 @@
   (controllers
    (make-array 2 :element-type 'controller
                :initial-contents `(,(make-controller)
-                                   ,(make-controller))))
+                                   ,(make-controller :id #xDEAD))))
   ; The joypads/memory cards know nothing about the higher up architecture, so
   ; we just use a closure defined in the mmu to fire off any interrupts.
   (exception-callback
@@ -149,6 +149,8 @@
                   t)
             (setf result
                   (joypads-received-from-controller joypads))
+            (when *debug-joypads*
+              (format t "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset))
             ; Once we read from the FIFO, the next entry is just FF
             (setf (joypads-received-from-controller joypads)
                   #xFF))
@@ -159,8 +161,8 @@
            (8 (setf result (joypads-joy-mode joypads)))
            (#xA (setf result (joypad-control-to-word (joypads-joy-ctrl joypads))))
            (#xE (setf result (joypads-joy-baud joypads))))
-    (when *debug-joypads*
-      (format t "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset))
+    ; (when *debug-joypads*
+    ;   (format t "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset))
     result))
 
 (declaim (ftype (function (joypads (unsigned-byte 4) (unsigned-byte 16))
@@ -168,18 +170,22 @@
                 write-joypads))
 (defun write-joypads (joypads offset value)
   "Puts a value at the specified offset in the joypad."
-  (when *debug-joypads*
-    (format t "Wrote 0x~4,'0x to joypads at offset 0x~1,'0x~%" value offset))
   (case offset
     (#x0
       ; Once we write, the transmission starts. We could transfer this a bit at
       ; a time, but as of right now, we transfer whole bytes at the
       ; end of the timer.
       (when *debug-joypads*
-        (format t "Wrote 0x~4,'0x to joypads at offset 0x~1,'0x~%" value offset))
+        (format t "~%~%Wrote 0x~4,'0x to joypad ~D at offset 0x~1,'0x~%"
+                value
+                (joypad-control-desired-slot (joypads-joy-ctrl joypads))
+                offset))
+
       (setf (joypads-transmission-timer joypads)
-            (* 1f0 (* 8 (joypads-joy-baud joypads))))
-      (setf (joypads-write-fifo joypads) (list value)))
+            (* .5f0 (* 8 (joypads-joy-baud joypads))))
+      (setf (joypads-write-fifo joypads) (list value))
+      (when (= value #x81)
+        (error "Mem card?~%")))
     (#x8 (setf (joypads-joy-mode joypads)
                value))
     (#xA (setf (joypads-joy-ctrl joypads)
@@ -196,13 +202,16 @@
                           list)
                 make-transmission-queue))
 (defun make-transmission-queue (controller)
-  (setf *skip* (not *skip*))
-  (list #xFF (ldb (byte 8 0) (controller-id controller))
-        (ldb (byte 8 8) (controller-id controller))
-        ; Down on the joypad?
-        (if *skip* #xFF #xBF)
-         ; Attempt to press x each alternating call?
-        (if *skip* #xBF #xFF)))
+  (if (/= #xDEAD (controller-id controller))
+    (progn
+     (setf *skip* (not *skip*))
+     (list #xFF (ldb (byte 8 0) (controller-id controller))
+           (ldb (byte 8 8) (controller-id controller))
+           ; Down on the joypad?
+           (if *skip* #xFF #xBF)
+           ; Attempt to press x each alternating call?
+           (if *skip* #xBF #xFF)))
+    (list #xFF)))
 
 (declaim (ftype (function (joypads))
                 send-and-receive-byte))
@@ -245,11 +254,15 @@
         ; it will pull ack low in order to notify it.
         (when (car (controller-transmission-queue controller))
           (setf (controller-acknowledge controller) :low)
+          (when *debug-joypads*
+            (format t "Ack goes low~%"))
           ; TODO(Samantha): This is surely wrong.
-          (setf (controller-ack-timer controller) 52f0)
+          (setf (controller-ack-timer controller) 5f0)
 
           (when (joypad-control-interrupt-on-acknowledge
                  (joypads-joy-ctrl joypads))
+            (when *debug-joypads*
+              (format t "irq-7 signalled.~%"))
             (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads)) t))))))
   (values))
 
@@ -266,10 +279,11 @@
                 tick-controller))
 (defun tick-controller (controller joypad-clocks)
   (when (> (controller-ack-timer controller) 0)
-    (decf (controller-ack-timer controller) joypad-clocks))
-
-  (when (<= (controller-ack-timer controller) 0)
-    (setf (controller-acknowledge controller) :high))
+    (decf (controller-ack-timer controller) joypad-clocks)
+    (when (<= (controller-ack-timer controller) 0)
+      (when *debug-joypads*
+        (format t "Ack goes high.~%"))
+      (setf (controller-acknowledge controller) :high)))
 
   (values))
 
@@ -291,5 +305,7 @@
     (when (and (not (joypads-fired-interrupt joypads))
                (joypad-status-has-irq-7 (joypads-joy-stat joypads)))
       (setf (joypads-fired-interrupt joypads) t)
+      (when *debug-joypads*
+        (format t "joy irq. baud: ~A~%" (joypads-joy-baud joypads)))
       (funcall (joypads-exception-callback joypads))))
   (values))
