@@ -79,7 +79,7 @@
 
 
 (defstruct joypads
-  (partial-cycles 0f0 :type single-float)
+  (transmission-timer 0f0 :type single-float)
   (fired-interrupt nil :type boolean)
   (write-fifo (list) :type list)
   (received-from-controller #xFF :type (unsigned-byte 8))
@@ -172,13 +172,14 @@
     (format t "Wrote 0x~4,'0x to joypads at offset 0x~1,'0x~%" value offset))
   (case offset
     (#x0
-      (setf (joypads-write-fifo joypads) (list value))
-      ; TODO(Samantha): The console seems to only trying to be
-      ; start communication with the controller and is only sending #x01. FIXME?
-      ; (unless (= value #x1)
-      ;   (error "The value _wasn't 1?~%"))
-      ; TODO(Samantha): Start a counter here of (* 8 joy_baud)
-      )
+      ; Once we write, the transmission starts. We could transfer this a bit at
+      ; a time, but as of right now, we transfer whole bytes at the
+      ; end of the timer.
+      (when *debug-joypads*
+        (format t "Wrote 0x~4,'0x to joypads at offset 0x~1,'0x~%" value offset))
+      (setf (joypads-transmission-timer joypads)
+            (* 1f0 (* 8 (joypads-joy-baud joypads))))
+      (setf (joypads-write-fifo joypads) (list value)))
     (#x8 (setf (joypads-joy-mode joypads)
                value))
     (#xA (setf (joypads-joy-ctrl joypads)
@@ -197,7 +198,9 @@
 (defun make-transmission-queue (controller)
   (setf *skip* (not *skip*))
   (list #xFF (ldb (byte 8 0) (controller-id controller))
-        (ldb (byte 8 8) (controller-id controller)) #xFF
+        (ldb (byte 8 8) (controller-id controller))
+        ; Down on the joypad?
+        (if *skip* #xFF #xBF)
          ; Attempt to press x each alternating call?
         (if *skip* #xBF #xFF)))
 
@@ -274,7 +277,7 @@
                 tick-joypads))
 (defun tick-joypads (joypads cpu-clocks)
   "Step joypad clocks forward according to specified number of cpu clocks."
-  (incf (joypads-partial-cycles joypads)
+  (decf (joypads-transmission-timer joypads)
         (cpu-clocks-to-joypad-clocks joypads cpu-clocks))
 
   (tick-controller
@@ -282,9 +285,8 @@
          (joypad-control-desired-slot (joypads-joy-ctrl joypads)))
    (cpu-clocks-to-joypad-clocks joypads cpu-clocks))
 
-  ; TODO(Samantha): Evil magic number. Remove.
-  (when (> (joypads-partial-cycles joypads) 204)
-    (decf (joypads-partial-cycles joypads) 204)
+  (when (< (joypads-transmission-timer joypads) 0f0)
+    (setf (joypads-transmission-timer joypads) 0f0)
     (send-and-receive-byte joypads)
     (when (and (not (joypads-fired-interrupt joypads))
                (joypad-status-has-irq-7 (joypads-joy-stat joypads)))
