@@ -198,10 +198,6 @@
                value)))
   value)
 
-; TODO(Samantha): Remove this once skitter controls this inputs.
-(declaim (boolean *skip*))
-(defparameter *skip* t)
-
 (declaim (ftype (function (controller)
                           list)
                 make-transmission-queue))
@@ -210,9 +206,7 @@
     (let ((buttons (funcall (controller-buttons-callback controller))))
      (list #xFF (ldb (byte 8 0) (controller-id controller))
            (ldb (byte 8 8) (controller-id controller))
-           ; Down on the joypad?
            (ldb (byte 8 0) buttons)
-           ; Attempt to press x each alternating call?
            (ldb (byte 8 8) buttons)))
     (list #xFF)))
 
