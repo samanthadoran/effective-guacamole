@@ -7,7 +7,7 @@
         :memory)
   (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
            #:read-gpu #:write-gpu #:gpu-exception-callback #:tick-gpu
-           #:controller-callback))
+           #:controller-callback #:power-on))
 
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 3) (debug 3)))
@@ -130,11 +130,6 @@
   (remaining-image-words 0 :type (unsigned-byte 32))
   (arguments nil :type list)
   (arguments-tail nil :type list))
-
-(defvar *viewport* (make-viewport '(1024 512)))
-; TODO(Samantha): Move this into a gpu power on?
-(cepl:repl 1024 512)
-(init-pads)
 
 (defstruct gpu
   "A model psx gpu"
@@ -275,6 +270,7 @@
 
 ; TODO(Samantha): Move load-image-word into a lamba within load-image so these
 ; can just be closed over.
+(declaim ((unsigned-byte 16) *xpos* *xsize* *xbase* *ypos*))
 (defparameter *xpos* 0)
 (defparameter *xsize* 0)
 (defparameter *xbase* 0)
@@ -284,7 +280,6 @@
                           (unsigned-byte 32))
                 load-image-word))
 (defun load-image-word (gpu value)
-  (declare (ignore value))
   (decf (gp0-operation-remaining-image-words (gpu-gp0-op gpu)))
   (if (not (zerop
             (gp0-operation-remaining-image-words
@@ -593,36 +588,35 @@
                 draw))
 (defun draw (gpu)
   (when (car (gpu-render-list gpu))
-    (with-viewport *viewport*
-      ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
-      ; work from a separate file or if the cepl instance is somehow
-      ; automagically global?
-      (step-host)
-      (when (mouse-button (mouse) mouse.left)
-        (format t "Pressed the mouse!~%"))
-      (when (window-closing (window 0))
-        (error "Finally.~%"))
-      (decay-events)
-      (clear)
-      (let* ((vao-indices (make-gpu-array
-                           (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
-                           :element-type :uint8))
-             (vao (make-gpu-array
-                   (gpu-render-list gpu)
-                   :element-type 'our-vert))
-             (buffer-stream (make-buffer-stream
-                             vao
-                             :length (gpu-render-list-length gpu)
-                             :index-array vao-indices)))
-        (map-g #'some-pipeline buffer-stream
-               :offset (v! (gpu-drawing-offset-x gpu)
-                           (gpu-drawing-offset-y gpu)))
-        (free-buffer-stream buffer-stream)
-        (free-gpu-array vao)
-        (free-gpu-array vao-indices))
-      (swap)
-      (setf (gpu-render-list gpu) (list))
-      (setf (gpu-render-list-length gpu) 0)))
+    ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
+    ; work from a separate file or if the cepl instance is somehow
+    ; automagically global?
+    (step-host)
+    (when (mouse-button (mouse) mouse.left)
+      (format t "Pressed the mouse!~%"))
+    (when (window-closing (window 0))
+      (error "Finally.~%"))
+    (decay-events)
+    (clear)
+    (let* ((vao-indices (make-gpu-array
+                         (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
+                         :element-type :uint8))
+           (vao (make-gpu-array
+                 (gpu-render-list gpu)
+                 :element-type 'our-vert))
+           (buffer-stream (make-buffer-stream
+                           vao
+                           :length (gpu-render-list-length gpu)
+                           :index-array vao-indices)))
+      (map-g #'some-pipeline buffer-stream
+             :offset (v! (gpu-drawing-offset-x gpu)
+                         (gpu-drawing-offset-y gpu)))
+      (free-buffer-stream buffer-stream)
+      (free-gpu-array vao)
+      (free-gpu-array vao-indices))
+    (swap)
+    (setf (gpu-render-list gpu) (list))
+    (setf (gpu-render-list-length gpu) 0))
   (values))
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
@@ -886,6 +880,17 @@
     (0 (read-gpu-read gpu))
     (4 (gpu-stat-to-word (gpu-gpu-stat gpu)))
     (otherwise (error "Invalid GPU read offset 0x~8,'0x~%" offset))))
+
+(declaim (ftype (function (gpu))
+                power-on))
+(defun power-on (gpu)
+  "Do some housekeeping for the power on of the gpu."
+  ; TODO(Samantha): Will this ever need the gpu in the future?
+  (declare (ignore gpu))
+  (cepl:repl 1024 512)
+  (setf (surface-title (current-surface (cepl-context)))
+        "Effective Guacamole")
+  (init-pads))
 
 (declaim (ftype (function (keyword)
                           (integer 3406 3413))

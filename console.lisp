@@ -40,6 +40,7 @@
   (setf (psx-bios-rom psx) (load-rom-from-file bios-rom-path))
   (map-memory psx)
   (psx-cpu:power-on (psx-cpu psx))
+  (psx-gpu:power-on (psx-gpu psx))
   (values))
 
 ; TODO(Samantha): Rename this to something more descriptive
