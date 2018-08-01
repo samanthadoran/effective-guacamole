@@ -160,7 +160,7 @@
                   #xFF))
            (4 (setf result (joypad-status-to-word
                (joypads-joy-stat joypads)
-               (aref (joypads-controllers joypads)
+               (aref (the (simple-array controller) (joypads-controllers joypads))
                      (joypad-control-desired-slot (joypads-joy-ctrl joypads))))))
            (8 (setf result (joypads-joy-mode joypads)))
            (#xA (setf result (joypad-control-to-word (joypads-joy-ctrl joypads))))
@@ -229,7 +229,7 @@
     ; None of this matters unless the joypad output is actually enabled.
     (when (joypad-control-output-enabled (joypads-joy-ctrl joypads))
       (let ((controller
-             (aref (joypads-controllers joypads)
+             (aref (the (simple-array controller) (joypads-controllers joypads))
                    (joypad-control-desired-slot (joypads-joy-ctrl joypads)))))
         ; (error "We ever get here?~%")
 
@@ -292,7 +292,7 @@
         (cpu-clocks-to-joypad-clocks joypads cpu-clocks))
 
   (tick-controller
-   (aref (joypads-controllers joypads)
+   (aref (the (simple-array controller) (joypads-controllers joypads))
          (joypad-control-desired-slot (joypads-joy-ctrl joypads)))
    (cpu-clocks-to-joypad-clocks joypads cpu-clocks))
 
