@@ -12,7 +12,8 @@
                #:skitter
                #:cepl.skitter.sdl2
                #:cepl.devil
-               #:varjo)
+               #:varjo
+               #:sdl2-game-controller-db)
   :serial t
   :components (
                (:file "memory-constants")

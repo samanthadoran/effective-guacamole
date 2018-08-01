@@ -3,14 +3,15 @@
   (:use :cl)
   (:export #:joypads #:make-joypads #:joypads-exception-callback
            #:tick-controllers-and-memory-cards #:tick-joypads
-           #:read-joypads #:write-joypads))
+           #:read-joypads #:write-joypads #:controller
+           #:controller-buttons-callback #:joypads-controllers))
 
 (in-package :psx-joypads)
 
 (declaim (optimize (speed 3) (safety 1)))
 
 (declaim (boolean *debug-joypads*))
-(defparameter *debug-joypads* t)
+(defparameter *debug-joypads* nil)
 
 ; Controller is selected by #x01, mem cards by #x81
 
@@ -23,7 +24,10 @@
   (ack-timer 0f0 :type single-float)
   (id #x5A41 :type (unsigned-byte 16))
   (acknowledge :high :type keyword)
-  (transmission-queue (list) :type list))
+  (transmission-queue (list) :type list)
+  (buttons-callback
+   (lambda () #x0)
+   :type (function () (unsigned-byte 16))))
 
 (defstruct joypad-status
   (transfer-ready t :type boolean)
@@ -203,14 +207,13 @@
                 make-transmission-queue))
 (defun make-transmission-queue (controller)
   (if (/= #xDEAD (controller-id controller))
-    (progn
-     (setf *skip* (not *skip*))
+    (let ((buttons (funcall (controller-buttons-callback controller))))
      (list #xFF (ldb (byte 8 0) (controller-id controller))
            (ldb (byte 8 8) (controller-id controller))
            ; Down on the joypad?
-           (if *skip* #xFF #xBF)
+           (ldb (byte 8 0) buttons)
            ; Attempt to press x each alternating call?
-           (if *skip* #xBF #xFF)))
+           (ldb (byte 8 8) buttons)))
     (list #xFF)))
 
 (declaim (ftype (function (joypads))
