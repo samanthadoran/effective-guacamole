@@ -92,7 +92,8 @@
 
 (declaim (ftype (function ((unsigned-byte 32))
                           keyword)
-                determine-segment))
+                determine-segment)
+         (inline determine-segment))
 (defun determine-segment (address)
   "Determines the segment of an address given in virtual terms."
   (case (ldb (byte 3 29) address)
@@ -107,7 +108,8 @@
 
 (declaim (ftype (function ((unsigned-byte 32))
                           boolean)
-                is-cacheable))
+                is-cacheable)
+         (inline is-cacheable))
 (defun is-cacheable (address)
   "Determines whether the given address is cacheable."
   ; The only cacheable locations are kuseg and kseg0, which
@@ -116,7 +118,8 @@
 
 (declaim (ftype (function ((unsigned-byte 32))
                           (unsigned-byte 32))
-                mask-address))
+                mask-address)
+         (inline mask-address))
 (defun mask-address (address)
   "Performs a bitmask of the given address to get an absolute address based
    upon the segment of memory."
@@ -130,12 +133,15 @@
 (declaim (ftype (function ((unsigned-byte 32)
                            (unsigned-byte 32)
                            (unsigned-byte 32))
-                          boolean) in-range))
+                          boolean)
+                in-range)
+         (inline in-range))
 (defun in-range (base size place)
   (and (>= place base) (< place (+ base size))))
 
 (declaim (ftype (function ((unsigned-byte 16)) (unsigned-byte 32))
-                sign-extend))
+                sign-extend)
+         (inline sign-extend))
 (defun sign-extend (to-be-extended)
   (logior to-be-extended
           (if (ldb-test (byte 1 15) to-be-extended)
@@ -145,7 +151,8 @@
             #x00000000)))
 
 (declaim (ftype (function ((unsigned-byte 8)) (unsigned-byte 32))
-                sign-extend-byte))
+                sign-extend-byte)
+         (inline sign-extend-byte))
 (defun sign-extend-byte (to-be-extended)
   (logior to-be-extended
           (if (ldb-test (byte 1 7) to-be-extended)
@@ -155,14 +162,16 @@
             #x00000000)))
 
 (declaim (ftype (function ((signed-byte 64)) (unsigned-byte 32))
-                wrap-word))
+                wrap-word)
+         (inline wrap-word))
 (defun wrap-word (to-be-wrapped)
   "Takes up to a 64 bit signed int and returns the truncated 32 bit
      representation."
   (ldb (byte 32 0) to-be-wrapped))
 
 (declaim (ftype (function ((unsigned-byte 32)) (signed-byte 32))
-                to-signed-byte-32))
+                to-signed-byte-32)
+         (inline to-signed-byte-32))
 (defun to-signed-byte-32 (to-be-converted)
   "Translates a psx unsigned word into a lisp signed int for easier arithmetic."
   ; If the MSB is set, do the inversions.
@@ -174,7 +183,8 @@
                            (unsigned-byte 32)
                            (unsigned-byte 32))
                           (unsigned-byte 32))
-                write-word-to-byte-array))
+                write-word-to-byte-array)
+         (inline write-word-to-byte-array))
 (defun write-word-to-byte-array (array offset word)
   (write-half-word-to-byte-array array offset (ldb (byte 16 0) word))
   (write-half-word-to-byte-array array (+ 2 offset) (ldb (byte 16 16) word))
@@ -184,7 +194,8 @@
                            (unsigned-byte 32)
                            (unsigned-byte 16))
                           (unsigned-byte 16))
-                write-half-word-to-byte-array))
+                write-half-word-to-byte-array)
+         (inline write-half-word-to-byte-array))
 (defun write-half-word-to-byte-array (array offset half-word)
   (setf
    (aref array offset)
@@ -197,7 +208,8 @@
 ; TODO(Samantha): Consider regions in these functions.
 (declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
                           (unsigned-byte 32))
-                read-word-from-byte-array))
+                read-word-from-byte-array)
+         (inline read-word-from-byte-array))
 (defun read-word-from-byte-array (array offset)
   "Performs the necessary shifting to reconstruct a word from a byte-array
        for general use."
@@ -209,7 +221,8 @@
 
 (declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
                           (unsigned-byte 16))
-                    read-half-word-from-byte-array))
+                    read-half-word-from-byte-array)
+         (inline read-half-word-from-byte-array))
 (defun read-half-word-from-byte-array (array offset)
   (logior
    (aref array offset)
