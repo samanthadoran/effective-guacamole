@@ -10,7 +10,7 @@
            #:is-cache-isolated #:tick))
 
 (in-package :psx-cpu)
-(declaim (optimize (speed 3) (safety 0)))
+(declaim (optimize (speed 3) (safety 1)))
 
 (defvar instructions (make-hash-table :test 'equal))
 
@@ -57,10 +57,10 @@
   (tag 0 :type (unsigned-byte 19))
   (instructions-as-words
    (make-array 4 :element-type 'instruction
-               :initial-contents `(,(make-instruction)
-                                   ,(make-instruction)
-                                    ,(make-instruction)
-                                    ,(make-instruction)))
+               :initial-contents (vector (make-instruction)
+                                         (make-instruction)
+                                         (make-instruction)
+                                         (make-instruction)))
    :type (simple-array instruction (4)))
   (valid
    (make-array 4 :element-type 'boolean
@@ -193,13 +193,8 @@
 (defparameter *illegal-instruction*
   (list "Illegal Instruction!"
         (lambda (cpu instruction)
+                (declare (ignore instruction))
                 (trigger-exception cpu :cause :reserved-instruction)
-                (error "Illegal instruction! Word: 0x~8,'0x, ~
-                        masked: 0x~6,'0x: #x~8,'0x(~A)~%"
-                       (instruction-word instruction)
-                       (instruction-masked-opcode instruction)
-                       (instruction-address instruction)
-                       (instruction-segment instruction))
                 (values))))
 
 (declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32))
@@ -354,7 +349,7 @@
   ; have a cycle cost. Investigate and implement.
   (tick cpu 1))
 
-(declaim (ftype (function (cpu) (unsigned-byte 8)) step-cpu))
+(declaim (ftype (function (cpu) (unsigned-byte 16)) step-cpu))
 (defun step-cpu (cpu)
   "Steps the cpu through a single fetch decode execute cycle, returning the
    number of cycles it took."
