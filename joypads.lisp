@@ -89,8 +89,8 @@
   (received-from-controller #xFF :type (unsigned-byte 8))
   (controllers
    (make-array 2 :element-type 'controller
-               :initial-contents `(,(make-controller)
-                                   ,(make-controller :id #xDEAD))))
+               :initial-contents (vector (make-controller)
+                                         (make-controller :id #xDEAD))))
   ; The joypads/memory cards know nothing about the higher up architecture, so
   ; we just use a closure defined in the mmu to fire off any interrupts.
   (exception-callback
@@ -153,8 +153,6 @@
                   t)
             (setf result
                   (joypads-received-from-controller joypads))
-            (when *debug-joypads*
-              (format t "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset))
             ; Once we read from the FIFO, the next entry is just FF
             (setf (joypads-received-from-controller joypads)
                   #xFF))
@@ -165,8 +163,8 @@
            (8 (setf result (joypads-joy-mode joypads)))
            (#xA (setf result (joypad-control-to-word (joypads-joy-ctrl joypads))))
            (#xE (setf result (joypads-joy-baud joypads))))
-    ; (when *debug-joypads*
-    ;   (format t "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset))
+    (when *debug-joypads*
+      (format t "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset))
     result))
 
 (declaim (ftype (function (joypads (unsigned-byte 4) (unsigned-byte 16))
@@ -174,16 +172,11 @@
                 write-joypads))
 (defun write-joypads (joypads offset value)
   "Puts a value at the specified offset in the joypad."
-  (case offset
+  (ecase offset
     (#x0
       ; Once we write, the transmission starts. We could transfer this a bit at
       ; a time, but as of right now, we transfer whole bytes at the
       ; end of the timer.
-      (when *debug-joypads*
-        (format t "~%~%Wrote 0x~4,'0x to joypad ~D at offset 0x~1,'0x~%"
-                value
-                (joypad-control-desired-slot (joypads-joy-ctrl joypads))
-                offset))
 
       (setf (joypads-transmission-timer joypads)
             (* .5f0 (* 8 (joypads-joy-baud joypads))))
@@ -196,6 +189,11 @@
                (word-to-joypad-control joypads value)))
     (#xE (setf (joypads-joy-baud joypads)
                value)))
+  (when *debug-joypads*
+    (format t "~%~%Wrote 0x~4,'0x to joypad ~D at offset 0x~1,'0x~%"
+            value
+            (joypad-control-desired-slot (joypads-joy-ctrl joypads))
+            offset))
   value)
 
 (declaim (ftype (function (controller)
