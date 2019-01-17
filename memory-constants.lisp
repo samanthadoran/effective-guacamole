@@ -23,7 +23,7 @@
            #:is-cacheable))
 
 (in-package :memory-constants)
-(declaim (optimize (speed 3) (safety 1)))
+(declaim (optimize (speed 3) (safety 0)))
 
 ; The following constants are are all in terms of a masked address unless
 ; otherwise specified.
@@ -181,17 +181,6 @@
 
 (declaim (ftype (function ((simple-array (unsigned-byte 8))
                            (unsigned-byte 32)
-                           (unsigned-byte 32))
-                          (unsigned-byte 32))
-                write-word-to-byte-array)
-         (inline write-word-to-byte-array))
-(defun write-word-to-byte-array (array offset word)
-  (write-half-word-to-byte-array array offset (ldb (byte 16 0) word))
-  (write-half-word-to-byte-array array (+ 2 offset) (ldb (byte 16 16) word))
-  word)
-
-(declaim (ftype (function ((simple-array (unsigned-byte 8))
-                           (unsigned-byte 32)
                            (unsigned-byte 16))
                           (unsigned-byte 16))
                 write-half-word-to-byte-array)
@@ -204,6 +193,17 @@
    (aref array (+ 1 offset))
    (ldb (byte 8 8) half-word))
   half-word)
+
+(declaim (ftype (function ((simple-array (unsigned-byte 8))
+                           (unsigned-byte 32)
+                           (unsigned-byte 32))
+                          (unsigned-byte 32))
+                write-word-to-byte-array)
+         (inline write-word-to-byte-array))
+(defun write-word-to-byte-array (array offset word)
+  (write-half-word-to-byte-array array offset (ldb (byte 16 0) word))
+  (write-half-word-to-byte-array array (+ 2 offset) (ldb (byte 16 16) word))
+  word)
 
 ; TODO(Samantha): Consider regions in these functions.
 (declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
@@ -221,7 +221,7 @@
 
 (declaim (ftype (function ((simple-array (unsigned-byte 8)) (unsigned-byte 32))
                           (unsigned-byte 16))
-                    read-half-word-from-byte-array)
+                read-half-word-from-byte-array)
          (inline read-half-word-from-byte-array))
 (defun read-half-word-from-byte-array (array offset)
   (logior

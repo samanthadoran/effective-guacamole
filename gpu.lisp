@@ -19,17 +19,19 @@
 ; working with controllers, but the only init I could find was from
 ; https://github.com/cbaggers/daft/blob/master/src/input/gamepads.lisp
 ; FIXME...?
+; TODO(Samantha): This crashes without controllers connected.
 (defparameter *sdl2-pads* nil)
 (defun init-pads ()
-  (unless *sdl2-pads*
-    (let ((ids '(0)))
-      (setf *sdl2-pads*  (make-array 10 :initial-element nil))
-      (sdl2-game-controller-db:load-db)
-      (loop :for id :in ids :do
-         (unless (aref *sdl2-pads* id)
-           (setf (aref *sdl2-pads* id)
-                 (sdl2:game-controller-open id))))
-      (skitter.sdl2:enable-background-joystick-events))))
+  ; (unless *sdl2-pads*
+  ;   (let ((ids '(0)))
+  ;     (setf *sdl2-pads*  (make-array 10 :initial-element nil))
+  ;     (sdl2-game-controller-db:load-db)
+  ;     (loop :for id :in ids :do
+  ;        (unless (aref *sdl2-pads* id)
+  ;          (setf (aref *sdl2-pads* id)
+  ;                (sdl2:game-controller-open id))))
+  ;     (skitter.sdl2:enable-background-joystick-events)))
+  )
 
 ; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
 (defstruct gpu-stat
@@ -928,7 +930,7 @@
 (declaim (ftype (function (keyword)
                           (or
                            (single-float 53.69 53.69)
-                           (single-float 53.224 53.224)))
+                           (single-float 53.2224 53.2224)))
                 gpu-clock-speed)
          (inline gpu-clock-speed))
 (defun gpu-clock-speed (video-mode)
