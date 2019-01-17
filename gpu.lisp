@@ -10,7 +10,7 @@
            #:controller-callback #:power-on))
 
 (in-package :psx-gpu)
-(declaim (optimize (speed 3) (safety 3) (debug 3)))
+(declaim (optimize (speed 3) (safety 1)))
 
 (declaim (boolean *debug-gpu*))
 (defparameter *debug-gpu* nil)
@@ -164,6 +164,7 @@
                :element-type '(unsigned-byte 8)
                :initial-element 0)
    :type (simple-array (unsigned-byte 8) (#x100000)))
+  ; TODO(Samantha): Make this a vect for speed
   (render-list (list) :type list)
   (render-list-length 0 :type (unsigned-byte 32))
   (gp0-op (make-gp0-operation) :type gp0-operation)
@@ -584,9 +585,15 @@
    (ash (if (gamepad-button (gamepad index) 0) 0 1) 14)
    (ash (if (gamepad-button (gamepad index) 2) 0 1) 15)))
 
+(defparameter *time* (get-internal-real-time))
+
 (declaim (ftype (function (gpu))
                 draw))
 (defun draw (gpu)
+  (let ((old-time *time*))
+    (setf *time* (get-internal-real-time))
+    (setf (surface-title (current-surface (cepl-context)))
+          (format nil "Effective Guacamole  FPS: ~f" (/ internal-time-units-per-second (- *time* old-time)))))
   (when (car (gpu-render-list gpu))
     ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
     ; work from a separate file or if the cepl instance is somehow
@@ -600,7 +607,7 @@
     (clear)
     (let* ((vao-indices (make-gpu-array
                          (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
-                         :element-type :uint8))
+                         :element-type :USHORT))
            (vao (make-gpu-array
                  (gpu-render-list gpu)
                  :element-type 'our-vert))
@@ -893,8 +900,11 @@
   (init-pads))
 
 (declaim (ftype (function (keyword)
-                          (integer 3406 3413))
-                clocks-per-scanline))
+                          (or
+                           (integer 3406 3406)
+                           (integer 3413 3413)))
+                clocks-per-scanline)
+         (inline clocks-per-scanline))
 (defun clocks-per-scanline (video-mode)
   "Determines the number of gpu clocks that will pass in one single scanline
    depending on the video mode being used."
@@ -903,8 +913,11 @@
          (:pal 3406)))
 
 (declaim (ftype (function (keyword)
-                          (integer 263 314))
-                lines-per-frame))
+                          (or
+                           (integer 263 263)
+                           (integer 314 314)))
+                lines-per-frame)
+         (inline lines-per-frame))
 (defun lines-per-frame (video-mode)
   "Determines the number of scanlines that will occur in one full frame
    (including VBLANKS) depending on the video mode being used."
@@ -913,8 +926,11 @@
          (:pal 314)))
 
 (declaim (ftype (function (keyword)
-                          single-float)
-                gpu-clock-speed))
+                          (or
+                           (single-float 53.69 53.69)
+                           (single-float 53.224 53.224)))
+                gpu-clock-speed)
+         (inline gpu-clock-speed))
 (defun gpu-clock-speed (video-mode)
   "Determines the gpu clock speed in MHz based upon the video mode."
   (ecase video-mode
@@ -923,7 +939,8 @@
 
 (declaim (ftype (function (gpu (unsigned-byte 16))
                           boolean)
-                line-in-vblank?))
+                line-in-vblank?)
+         (inline line-in-vblank?))
 (defun line-in-vblank? (gpu scanline)
   "Determines whether or not the gpu is currently in the vertical
    blanking period."
@@ -933,42 +950,17 @@
        (gpu-display-end-y gpu))))
 
 (declaim (ftype (function (keyword (unsigned-byte 16))
-                         single-float)
-               cpu-clocks-to-gpu-clocks))
+                          single-float)
+                cpu-clocks-to-gpu-clocks)
+         (inline cpu-clocks-to-gpu-clocks))
 (defun cpu-clocks-to-gpu-clocks (video-mode cpu-clocks)
   "Converts cpu clocks into gpu clocks depending on the video mode."
   (* (/ (gpu-clock-speed video-mode) 33.868) cpu-clocks))
 
-(declaim (ftype (function (gpu (unsigned-byte 16)))
-                tick-gpu))
-(defun tick-gpu (gpu cpu-clocks)
-  "Updates the GPUs state by stepping it through time equal to a number of
-   given cpu clocks that have occured since the last tick."
-  (incf (gpu-partial-cycles gpu)
-        (cpu-clocks-to-gpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu)) cpu-clocks))
-  (let* ((gpu-stat (gpu-gpu-stat gpu))
-         (video-mode (gpu-stat-video-mode gpu-stat))
-         (gpu-cycles (truncate (gpu-partial-cycles gpu)))
-         (previous-scanline (gpu-current-scanline gpu)))
-    (declare ((unsigned-byte 16) gpu-cycles))
-
-    ; We can only work in whole cycles, so store the remaining
-    ; decimal component.
-    (decf (gpu-partial-cycles gpu)
-          gpu-cycles)
-
-    (let ((scanline-cycles (+ gpu-cycles (gpu-current-scanline-cycles gpu))))
-      (declare ((unsigned-byte 16) scanline-cycles))
-      (setf (gpu-current-scanline-cycles gpu)
-            (mod scanline-cycles (clocks-per-scanline video-mode)))
-      (setf (gpu-current-scanline gpu)
-            (mod
-             (+ previous-scanline
-                (truncate
-                 scanline-cycles
-                 (clocks-per-scanline video-mode)))
-             (lines-per-frame video-mode))))
-
+(declaim (ftype (function (gpu))
+                update-gpu-stat))
+(defun update-gpu-stat (gpu)
+  (let ((gpu-stat (gpu-gpu-stat gpu)))
     (if (gpu-stat-vertical-interlace gpu-stat)
       (progn
        (setf (gpu-stat-interlace-field gpu-stat)
@@ -992,16 +984,48 @@
        ; it simply checks whether or not the given scanline is odd.
        (setf (gpu-stat-odd-visible-scanline gpu-stat)
              (oddp (gpu-current-scanline gpu)))))
-
     (when (line-in-vblank? gpu (gpu-current-scanline gpu))
       ; Lines within VBLANK aren't visible, so this gets set to a falsey value.
       (setf (gpu-stat-odd-visible-scanline gpu-stat)
-            nil)
+            nil)))
+  (values))
+
+(declaim (ftype (function (gpu))
+                update-scanline))
+(defun update-scanline (gpu)
+  (let ((video-mode (gpu-stat-video-mode (gpu-gpu-stat gpu)))
+        (gpu-cycles (wrap-word (truncate (gpu-partial-cycles gpu)))))
+    (setf (gpu-current-scanline-cycles gpu)
+          (wrap-word (+ gpu-cycles (gpu-current-scanline-cycles gpu))))
+    (decf (gpu-partial-cycles gpu)
+          gpu-cycles)
+    (when (>= (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode))
+      (setf (gpu-current-scanline gpu)
+            (ldb (byte 16 0) (mod (1+ (gpu-current-scanline gpu)) (lines-per-frame video-mode))))
+      (setf (gpu-current-scanline-cycles gpu)
+            (mod (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode)))))
+  (values))
+
+(declaim (ftype (function (gpu (unsigned-byte 16)))
+                tick-gpu))
+(defun tick-gpu (gpu cpu-clocks)
+  "Updates the GPUs state by stepping it through time equal to a number of
+   given cpu clocks that have occured since the last tick."
+  (incf (gpu-partial-cycles gpu)
+        (cpu-clocks-to-gpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
+                                  cpu-clocks))
+  (let ((previous-scanline (gpu-current-scanline gpu)))
+
+    (update-scanline gpu)
+
+    (update-gpu-stat gpu)
+
+    (when (and (not (line-in-vblank? gpu previous-scanline))
+               (line-in-vblank? gpu (gpu-current-scanline gpu)))
       ; We only want to do things like triggering the VBLANK interrupt and
       ; drawing the framebuffer on the rising edge.
-      (unless (line-in-vblank? gpu previous-scanline)
-        (setf (gpu-frame-counter gpu)
-              (wrap-word (1+ (gpu-frame-counter gpu))))
-        (funcall (gpu-exception-callback gpu))
-        (draw gpu))))
+      (setf (gpu-frame-counter gpu)
+            (wrap-word (1+ (gpu-frame-counter gpu))))
+      (funcall (gpu-exception-callback gpu))
+      (draw gpu)))
   (values))
