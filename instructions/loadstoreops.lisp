@@ -5,11 +5,11 @@
   (ldb-test (byte 1 16) (cop0:cop0-status-register (cpu-cop0 cpu))))
 
 (def-i-type lui #x0F
-  (set-register cpu target-register (ash immediate 16)))
+  (set-register cpu target-register-index (ash immediate 16)))
 
 ; TODO(Samantha): Consider making a macro for cache sensitivity.
 (def-i-type lb #x20
-  (setf (cpu-pending-load-register cpu) target-register)
+  (setf (cpu-pending-load-register cpu) target-register-index)
   (setf
    (cpu-pending-load-value cpu)
    (sign-extend-byte (funcall (cpu-memory-get-byte cpu) address))))
@@ -18,7 +18,7 @@
   (if (/= 0 (mod address 2))
     (trigger-exception cpu :cause :address-load-error)
     (progn
-     (setf (cpu-pending-load-register cpu) target-register)
+     (setf (cpu-pending-load-register cpu) target-register-index)
      (setf
       (cpu-pending-load-value cpu)
       (sign-extend (funcall (cpu-memory-get-half-word cpu) address))))))
@@ -29,8 +29,8 @@
 (def-i-type lwl #x22
   (let* ((aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
-         (current-value (aref (cpu-registers cpu) target-register)))
-    (setf (cpu-pending-load-register cpu) target-register)
+         (current-value target-register-value))
+    (setf (cpu-pending-load-register cpu) target-register-index)
     (setf (cpu-pending-load-value cpu)
           (case (ldb (byte 2 0) address)
             (0 (logior
@@ -51,13 +51,13 @@
   (if (/= 0 (mod address 4))
     (trigger-exception cpu :cause :address-load-error)
     (progn
-     (setf (cpu-pending-load-register cpu) target-register)
+     (setf (cpu-pending-load-register cpu) target-register-index)
      (setf
       (cpu-pending-load-value cpu)
       (funcall (cpu-memory-get-word cpu) address)))))
 
 (def-i-type lbu #x24
-  (setf (cpu-pending-load-register cpu) target-register)
+  (setf (cpu-pending-load-register cpu) target-register-index)
   (setf (cpu-pending-load-value cpu)
         (funcall (cpu-memory-get-byte cpu) address)))
 
@@ -65,7 +65,7 @@
   (if (/= 0 (mod address 2))
     (trigger-exception cpu :cause :load-address-error)
     (progn
-     (setf (cpu-pending-load-register cpu) target-register)
+     (setf (cpu-pending-load-register cpu) target-register-index)
      (setf
       (cpu-pending-load-value cpu)
       (funcall (cpu-memory-get-half-word cpu) address)))))
@@ -73,8 +73,8 @@
 (def-i-type lwr #x26
   (let* ((aligned-address (logand address #xFFFFFFFC))
          (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
-         (current-value (aref (cpu-registers cpu) target-register)))
-    (setf (cpu-pending-load-register cpu) target-register)
+         (current-value target-register-value))
+    (setf (cpu-pending-load-register cpu) target-register-index)
     (setf (cpu-pending-load-value cpu)
           (case (ldb (byte 2 0) address)
             (0 (logior
@@ -96,7 +96,7 @@
     (invalidate-cache cpu)
     (funcall (cpu-memory-set-byte cpu)
              address
-             (ldb (byte 8 0) (aref (cpu-registers cpu) target-register)))))
+             (ldb (byte 8 0) target-register-value))))
 
 (def-i-type sh #x29
   (if (/= 0 (mod address 2))
@@ -105,14 +105,14 @@
       (invalidate-cache cpu)
       (funcall (cpu-memory-set-half-word cpu)
                address
-               (ldb (byte 16 0) (aref (cpu-registers cpu) target-register))))))
+               (ldb (byte 16 0) target-register-value)))))
 
 (def-i-type swl #x2A
   (if (is-cache-isolated cpu)
     (invalidate-cache cpu)
     (let* ((aligned-address (logand address #xFFFFFFFC))
            (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
-           (value (aref (cpu-registers cpu) target-register)))
+           (value target-register-value))
       (funcall (cpu-memory-set-word cpu)
                aligned-address
                (case (ldb (byte 2 0) address)
@@ -137,14 +137,14 @@
       (invalidate-cache cpu)
       (funcall (cpu-memory-set-word cpu)
                address
-               (aref (cpu-registers cpu) target-register)))))
+               target-register-value))))
 
 (def-i-type swr #x2E
   (if (is-cache-isolated cpu)
     (invalidate-cache cpu)
     (let* ((aligned-address (logand address #xFFFFFFFC))
            (aligned-word (funcall (cpu-memory-get-word cpu) aligned-address))
-           (value (aref (cpu-registers cpu) target-register)))
+           (value target-register-value))
       (funcall (cpu-memory-set-word cpu)
                aligned-address
                (case (ldb (byte 2 0) address)
@@ -197,85 +197,85 @@
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.
 (def-r-type mfc0 #xC0000
-  (setf (cpu-pending-load-register cpu) target-register)
+  (setf (cpu-pending-load-register cpu) target-register-index)
   (setf
    (cpu-pending-load-value cpu)
-   (case destination-register
+   (case destination-register-index
      (12 (cop0:cop0-status-register (cpu-cop0 cpu)))
      (13 (cop0:cop0-cause-register (cpu-cop0 cpu)))
      (14 (cop0:cop0-epc-register (cpu-cop0 cpu)))
      (otherwise
-      (error "Unknown read to cop0$~d~%" destination-register)
+      (error "Unknown read to cop0$~d~%" destination-register-index)
       0))))
 
 (def-r-type mtc0 #xC0004
-  (case destination-register
+  (case destination-register-index
     ; TODO(Samantha): Handle anything other than $cop0_12.
     ; BPC
     (3
-     (unless (zerop (aref (cpu-registers cpu) target-register))
+     (unless (zerop target-register-value)
        (error "Tried to write 0x~8,'0x to $cop0_~d~%"
-              (aref (cpu-registers cpu) target-register)
-              destination-register)))
+              target-register-value
+              destination-register-index)))
     ; BDA
     (5
-     (unless (zerop (aref (cpu-registers cpu) target-register))
+     (unless (zerop target-register-value)
        (error "Tried to write 0x~8,'0x to $cop0_~d~%"
-              (aref (cpu-registers cpu) target-register)
-              destination-register)))
+              target-register-value
+              destination-register-index)))
     ; JUMPDEST
     (6
-      (unless (zerop (aref (cpu-registers cpu) target-register))
+      (unless (zerop target-register-value)
         (error "Tried to write 0x~8,'0x to $cop0_~d~%"
-               (aref (cpu-registers cpu) target-register)
-               destination-register)))
+               target-register-value
+               destination-register-index)))
     ; DCIC
     (7
-      (unless (zerop (aref (cpu-registers cpu) target-register))
+      (unless (zerop target-register-value)
         (error "Tried to write 0x~8,'0x to $cop0_~d~%"
-               (aref (cpu-registers cpu) target-register)
-               destination-register)))
+               target-register-value
+               destination-register-index)))
     ; BDAM
     (9
-      (unless (zerop (aref (cpu-registers cpu) target-register))
+      (unless (zerop target-register-value)
         (error "Tried to write 0x~8,'0x to $cop0_~d~%"
-               (aref (cpu-registers cpu) target-register)
-               destination-register)))
+               target-register-value
+               destination-register-index)))
     ; BPCM
     (11
-      (unless (zerop (aref (cpu-registers cpu) target-register))
+      (unless (zerop target-register-value)
         (error "Tried to write 0x~8,'0x to $cop0_~d~%"
-               (aref (cpu-registers cpu) target-register)
-               destination-register)))
+               target-register-value
+               destination-register-index)))
     (12
      (setf
       (cop0:cop0-status-register (cpu-cop0 cpu))
-      (aref (cpu-registers cpu) target-register)))
+      target-register-value))
     ; CAUSE
     (13
-     (unless (zerop (aref (cpu-registers cpu) target-register))
+     (unless (zerop target-register-value)
        (error "Are we actually storing to the cause?~%"))
       (setf
        (cop0:cop0-cause-register (cpu-cop0 cpu))
-       (aref (cpu-registers cpu) target-register)))
+       target-register-value))
     (otherwise
      (error "Unknown write of 0x~8,'0X to $cop0_~d~%"
-             (aref (cpu-registers cpu) target-register)
-             destination-register)
+             target-register-value
+             destination-register-index)
      0)))
 
 (def-r-type mfhi #xFF10
   (set-register
-   cpu destination-register
+   cpu destination-register-index
    (cpu-hi cpu)))
 
 (def-r-type mthi #xFF11
-  (setf (cpu-hi cpu) (aref (cpu-registers cpu) source-register)))
+  (setf (cpu-hi cpu) source-register-value))
 
 (def-r-type mflo #xFF12
   (set-register
-   cpu destination-register
+   cpu destination-register-index
    (cpu-lo cpu)))
 
 (def-r-type mtlo #xFF13
-  (setf (cpu-lo cpu) (aref (cpu-registers cpu) source-register)))
+  (setf (cpu-lo cpu) source-register-value))

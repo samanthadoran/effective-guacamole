@@ -4,8 +4,8 @@
 (def-i-type b-cond-z #x01
   ; If bit 16 is set, we have BGEZ, else BLTZ. Test either way.
   (when (if (ldb-test (byte 1 16) (instruction-word instruction))
-          (>= (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0)
-          (< (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0))
+          (>= (to-signed-byte-32 source-register-value) 0)
+          (< (to-signed-byte-32 source-register-value) 0))
     ; Bit 20 indicates that we either have BGEZAL or BLTZAL
     (when (ldb-test (byte 1 20) (instruction-word instruction))
       (set-register cpu 31 (cpu-next-program-counter cpu)))
@@ -25,31 +25,34 @@
   (jmp cpu instruction))
 
 (def-i-type beq #x04
-  (when (= (aref (cpu-registers cpu) source-register)
-           (aref (cpu-registers cpu) target-register))
+  (when (= source-register-value
+           target-register-value)
     (branch cpu (sign-extend immediate))))
 
 (def-i-type bne #x05
-  (when (/= (aref (cpu-registers cpu) source-register)
-            (aref (cpu-registers cpu) target-register))
+  (when (/= source-register-value
+            target-register-value)
     (branch cpu (sign-extend immediate))))
 
 (def-i-type blez #x06
-  (when (<= (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0)
+  (when (<= (to-signed-byte-32 source-register-value) 0)
     (branch cpu (sign-extend immediate))))
 
 (def-i-type bgtz #x07
-  (when (> (to-signed-byte-32 (aref (cpu-registers cpu) source-register)) 0)
+  (when (> (to-signed-byte-32 source-register-value) 0)
     (branch cpu (sign-extend immediate))))
 
 (def-i-type jr #xFF08
   (setf (cpu-branch-opcode cpu) t)
   (setf
    (cpu-next-program-counter cpu)
-   (aref (cpu-registers cpu) source-register)))
+   source-register-value))
 
 (def-r-type jalr #xFF09
-  (set-register cpu destination-register (cpu-next-program-counter cpu))
+  (set-register
+   cpu
+   destination-register-index
+   (cpu-next-program-counter cpu))
   (jr cpu instruction))
 
 (def-i-type syscall #xFF0C

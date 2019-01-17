@@ -72,10 +72,12 @@
   (ticks 0 :type (unsigned-byte 32))
   (cache-control (psx-cache-control:make-cache-control)
                  :type psx-cache-control:cache-control)
+  ; TODO(Samantha): Although this would set each array reference to the same
+  ; object, on power on we properly initialize. This silences and SBCL
+  ; optimization hint.
   (cache-lines
    (make-array 256 :element-type 'cache-line
-               :initial-contents (loop for i from 0 to 255
-                                   collect (make-cache-line)))
+               :initial-element (make-cache-line))
    :type (simple-array cache-line (256)))
   (program-counter 0 :type (unsigned-byte 32))
   ; Used for exceptions exclusively.
@@ -87,10 +89,6 @@
    :type (simple-array (unsigned-byte 32) (32)))
   (pending-load-register 0 :type (unsigned-byte 5))
   (pending-load-value 0 :type (unsigned-byte 32))
-  (delay-registers
-   (make-array 32 :element-type '(unsigned-byte 32)
-               :initial-element 0)
-   :type (simple-array (unsigned-byte 32) (32)))
   (hi 0 :type (unsigned-byte 32))
   (lo 0 :type (unsigned-byte 32))
   (cop0 (cop0:make-cop0) :type cop0:cop0)
@@ -121,17 +119,20 @@
   "Sets the cpu to the initial power up state."
   ; TODO(Samantha): Fully implement.
   (setf (cpu-program-counter cpu) +bios-begin-unmasked-address+)
+  (loop for i from 0 to 255
+    do (setf (aref (cpu-cache-lines cpu) i)
+             (make-cache-line)))
   (setf
    (cpu-next-program-counter cpu)
    (wrap-word (+ (cpu-program-counter cpu) 4))))
 
 (declaim (ftype (function (cpu (unsigned-byte 5) (unsigned-byte 32))
                           (unsigned-byte 32))
-        set-register))
+                set-register))
 (defun set-register (cpu index value)
-  "Sets a register in a load-delay conscious fashion."
-  (setf (aref (cpu-delay-registers cpu) index) value)
-  (setf (aref (cpu-delay-registers cpu) 0) 0))
+  "Immediately writes a value to a register, ignoring any and all load delays."
+  (setf (aref (cpu-registers cpu) index) value)
+  (setf (aref (cpu-registers cpu) 0) 0))
 
 (declaim (ftype (function (cpu))
                 invalidate-cache))
@@ -265,7 +266,6 @@
      (decode (funcall (cpu-memory-get-word cpu) (cpu-program-counter cpu))
              (cpu-program-counter cpu)))))
 
-; TODO(Samantha): This should be triggered by irqs through step-cpu by checking cop0.
 (declaim (ftype (function (cpu &key (:cause keyword))
                           (unsigned-byte 32))
                 trigger-exception))
@@ -319,9 +319,7 @@
   (when (or (eq cause :address-write-error) (eq cause :address-load-error))
     (setf
      (cop0:cop0-bad-virtual-address-register (cpu-cop0 cpu))
-     (cpu-current-program-counter cpu))
-    ; These seem to crop up from timing issues.. which is terrifying.
-    (error "This _really_ shouldn't be happening. ~%"))
+     (cpu-current-program-counter cpu)))
   ; TODO(Samantha): Understand this mess better.
   (setf
    (ldb (byte 6 0) (cop0:cop0-status-register (cpu-cop0 cpu)))
@@ -333,15 +331,9 @@
 (defun execute (cpu instruction)
   "Executes a single instruction and returns the number of cycles that this
    took."
-  (set-register cpu (cpu-pending-load-register cpu)
-                (cpu-pending-load-value cpu))
-  (setf (cpu-pending-load-register cpu) 0)
-  (setf (cpu-pending-load-value cpu) 0)
   (if (zerop (mod (cpu-current-program-counter cpu) 4))
     (funcall (instruction-operation instruction) cpu instruction)
     (trigger-exception cpu :cause :address-load-error))
-  ; Move the registers from the delay slots into the regular ones.
-  (setf (cpu-registers cpu) (copy-seq (cpu-delay-registers cpu)))
   ; TODO(Samantha): We need to finally start working with timing. Many (all?)
   ; of the opcodes take a fixed amount of time with the only variable being
   ; whether or not they are in cache or you hit a pipeline hazard. So, this
@@ -367,6 +359,8 @@
           (wrap-word (+ 4 (cpu-next-program-counter cpu))))
     ; TODO(Samantha): Move this out into irq.lisp
     ; If there is an irq pending, we can't just continue execution as normal.
+    ; TODO(Samantha): This is almost certainly incorrect. An exception should
+    ; be a pipeline hazard?
     (if (and
          (not (zerop (logand
                       (funcall (cpu-memory-get-half-word cpu)

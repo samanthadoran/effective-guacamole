@@ -17,22 +17,34 @@
   `(def-instruction
      ,name
      ,opcode
-     (let* ((source-register (instruction-source-register instruction))
-            (target-register (instruction-target-register instruction))
+     (let* ((source-register-index (instruction-source-register instruction))
+            (source-register-value (aref (cpu-registers cpu)
+                                         source-register-index))
+            (target-register-index (instruction-target-register instruction))
+            (target-register-value (aref (cpu-registers cpu)
+                                         target-register-index))
             (immediate (instruction-immediate-value instruction))
             (address
              (wrap-word (+ (sign-extend immediate)
-                           (aref (cpu-registers cpu) source-register)))))
-       (declare (ignorable address))
+                           source-register-value))))
+       (declare (ignorable address)
+                ((unsigned-byte 32) source-register-value target-register-value)
+                ((unsigned-byte 5) source-register-index target-register-index))
+       ; Move load delay along
+       (set-register cpu
+                          (cpu-pending-load-register cpu)
+                          (cpu-pending-load-value cpu))
+       (setf (cpu-pending-load-register cpu) 0)
+       (setf (cpu-pending-load-value cpu) 0)
        (when *debug-cpu*
          (format t "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) #x~4,'0x~%"
                  (instruction-address instruction)
                  (instruction-segment instruction)
                  (instruction-mnemonic instruction)
-                 target-register
-                 (aref (cpu-registers cpu) target-register)
-                 source-register
-                 (aref (cpu-registers cpu) source-register)
+                 target-register-index
+                 target-register-value
+                 source-register-index
+                 source-register-value
                  immediate))
        ,@body)))
 
@@ -41,6 +53,12 @@
     ,name
     ,opcode
     (let ((jump-target (instruction-jump-target instruction)))
+      ; Move load delay along
+      (set-register cpu
+                         (cpu-pending-load-register cpu)
+                         (cpu-pending-load-value cpu))
+      (setf (cpu-pending-load-register cpu) 0)
+      (setf (cpu-pending-load-value cpu) 0)
       (when *debug-cpu*
         (format t "#x~8,'0x(~A): ~A #x~6,'0x~%"
                 (instruction-address instruction)
@@ -53,20 +71,38 @@
   `(def-instruction
      ,name
      ,opcode
-     (let ((source-register (instruction-source-register instruction))
-           (target-register (instruction-target-register instruction))
-           (destination-register (instruction-destination-register instruction))
-           (shift-amount (instruction-shift-amount instruction)))
-       (declare (ignorable shift-amount))
+     (let* ((source-register-index (instruction-source-register instruction))
+            (source-register-value (aref (cpu-registers cpu)
+                                         source-register-index))
+            (target-register-index (instruction-target-register instruction))
+            (target-register-value (aref (cpu-registers cpu)
+                                         target-register-index))
+            (destination-register-index (instruction-destination-register instruction))
+            (destination-register-value (aref (cpu-registers cpu)
+                                              destination-register-index))
+            (shift-amount (instruction-shift-amount instruction)))
+       (declare (ignorable shift-amount)
+                ((unsigned-byte 32) source-register-value
+                                    target-register-value
+                                    destination-register-value)
+                ((unsigned-byte 5) source-register-index
+                                   target-register-index
+                                   destination-register-index))
+       ; Move load delay along
+       (set-register cpu
+                          (cpu-pending-load-register cpu)
+                          (cpu-pending-load-value cpu))
+       (setf (cpu-pending-load-register cpu) 0)
+       (setf (cpu-pending-load-value cpu) 0)
        (when *debug-cpu*
          (format t "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) $~D(#x~8,'0x)~%"
                  (instruction-address instruction)
                  (instruction-segment instruction)
                  (instruction-mnemonic instruction)
-                 destination-register
-                 (aref (cpu-registers cpu) destination-register)
-                 source-register
-                 (aref (cpu-registers cpu) source-register)
-                 target-register
-                 (aref (cpu-registers cpu) target-register)))
+                 destination-register-index
+                 destination-register-value
+                 source-register-index
+                 source-register-value
+                 target-register-index
+                 target-register-value))
        ,@body)))
