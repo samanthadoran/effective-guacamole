@@ -11,7 +11,6 @@
                #:livesupport
                #:skitter
                #:cepl.skitter.sdl2
-               #:cepl.devil
                #:varjo
                #:sdl2-game-controller-db)
   :serial t
