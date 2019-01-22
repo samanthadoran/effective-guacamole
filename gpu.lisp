@@ -10,7 +10,7 @@
            #:controller-callback #:power-on))
 
 (in-package :psx-gpu)
-(declaim (optimize (speed 3) (safety 1)))
+(declaim (optimize (speed 3) (safety 3) (debug 3)))
 
 (declaim (boolean *debug-gpu*))
 (defparameter *debug-gpu* nil)
@@ -161,11 +161,11 @@
   (frame-counter 0 :type (unsigned-byte 32))
   (partial-cycles 0f0 :type single-float)
   (vram
-   (make-array #x100000
+   (make-array '(512 2048)
                ; TODO(Samantha): Should this be u8 or u16?
                :element-type '(unsigned-byte 8)
-               :initial-element 0)
-   :type (simple-array (unsigned-byte 8) (#x100000)))
+               :initial-element #xFF)
+   :type (simple-array (unsigned-byte 8) (512 2048)))
   ; TODO(Samantha): Make this a vect for speed
   (render-list (list) :type list)
   (render-list-length 0 :type (unsigned-byte 32))
@@ -251,12 +251,12 @@
 (defun render-opaque-monochromatic-quadrilateral (gpu color v1 v2 v3 v4)
   ; TODO(Samantha): Use an index-array instead of copying vertices.
   (setf (gpu-render-list gpu)
-        (list* (list (word-to-position v3) (word-to-color color))
-               (list (word-to-position v2) (word-to-color color))
-               (list (word-to-position v1) (word-to-color color))
-               (list (word-to-position v2) (word-to-color color))
-               (list (word-to-position v3) (word-to-color color))
-               (list (word-to-position v4) (word-to-color color))
+        (list* (make-vertex v3 color)
+               (make-vertex v2 color)
+               (make-vertex v1 color)
+               (make-vertex v2 color)
+               (make-vertex v3 color)
+               (make-vertex v4 color)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   0)
@@ -300,12 +300,22 @@
       (gp0-operation-required-number-of-arguments
        (gpu-gp0-op gpu))
       0)))
-  ; TODO(Samantha): We need a way to hold onto this position.
-  (write-word-to-byte-array (gpu-vram gpu)
-                            (+ (* *ypos* #x800) *xpos*)
-                            value)
-  (incf *xpos* 4)
-  (when (>= *xpos* (+ *xsize* *xbase*))
+  (setf
+   (aref (gpu-vram gpu) *ypos* *xpos*)
+   (ldb (byte 8 0) value))
+  (incf *xpos*)
+  (setf
+   (aref (gpu-vram gpu) *ypos* *xpos*)
+   (ldb (byte 8 8) value))
+  (incf *xpos*)
+  (setf
+   (aref (gpu-vram gpu) *ypos* *xpos*)
+   (ldb (byte 8 16) value))
+  (incf *xpos*)
+  (setf
+   (aref (gpu-vram gpu) *ypos* *xpos*)
+   (ldb (byte 8 24) value))
+  (when (or (>= *xpos* (+ *xsize* *xbase*)) (>= *xpos* 2048))
     (setf *xpos* *xbase*)
     (incf *ypos*))
   0)
@@ -350,6 +360,19 @@
     (format t "GP0(#xC0): save-image-from-vram is unimplemented!~%"))
   0)
 
+(declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32))
+                          list)
+                make-vertex))
+(defun make-vertex (position color)
+  (list (word-to-position position) (v! 0 0) (word-to-color color)))
+
+(declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
+                          list)
+                make-textured-vertex))
+(defun make-textured-vertex (position uv color)
+  ; TODO(Samantha): This is very wrong.
+  (list (word-to-position position) (word-to-position uv) (word-to-color color)))
+
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32)
@@ -359,12 +382,12 @@
 (defun render-opaque-shaded-quadrilateral (gpu color1 v1 color2 v2
                                                color3 v3 color4 v4)
   (setf (gpu-render-list gpu)
-        (list* (list (word-to-position v3) (word-to-color color3))
-               (list (word-to-position v2) (word-to-color color2))
-               (list (word-to-position v1) (word-to-color color1))
-               (list (word-to-position v2) (word-to-color color2))
-               (list (word-to-position v3) (word-to-color color3))
-               (list (word-to-position v4) (word-to-color color4))
+        (list* (make-vertex v3 color3)
+               (make-vertex v2 color2)
+               (make-vertex v1 color1)
+               (make-vertex v2 color2)
+               (make-vertex v3 color3)
+               (make-vertex v4 color4)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   0)
@@ -385,12 +408,12 @@
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
   (setf (gpu-render-list gpu)
-        (list* (list (word-to-position v3) (word-to-color #xFF))
-               (list (word-to-position v2) (word-to-color #xFF))
-               (list (word-to-position v1) (word-to-color #xFF))
-               (list (word-to-position v2) (word-to-color #xFF))
-               (list (word-to-position v3) (word-to-color #xFF))
-               (list (word-to-position v4) (word-to-color #xFF))
+        (list* (make-vertex v3 #xFF)
+               (make-vertex v2 #xFF)
+               (make-vertex v1 #xFF)
+               (make-vertex v2 #xFF)
+               (make-vertex v3 #xFF)
+               (make-vertex v4 #xFF)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
@@ -410,16 +433,14 @@
                                                      v2 texture-coordinate2-and-texture-page
                                                      v3 texture-coordinate3
                                                      v4 texture-coordinate4)
-  (declare (ignore color1 texture-coordinate1-and-palette
-                   texture-coordinate2-and-texture-page texture-coordinate3
-                   texture-coordinate4))
+  (declare (ignore color1))
   (setf (gpu-render-list gpu)
-        (list* (list (word-to-position v3) (word-to-color #xFF))
-               (list (word-to-position v2) (word-to-color #xFF))
-               (list (word-to-position v1) (word-to-color #xFF))
-               (list (word-to-position v2) (word-to-color #xFF))
-               (list (word-to-position v3) (word-to-color #xFF))
-               (list (word-to-position v4) (word-to-color #xFF))
+        (list* (make-textured-vertex v3 texture-coordinate3 #xFF)
+               (make-textured-vertex v2 texture-coordinate2-and-texture-page #xFF)
+               (make-textured-vertex v1 texture-coordinate1-and-palette #xFF)
+               (make-textured-vertex v2 texture-coordinate2-and-texture-page #xFF)
+               (make-textured-vertex v3 texture-coordinate3 #xFF)
+               (make-textured-vertex v4 texture-coordinate4 #xFF)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
@@ -443,12 +464,12 @@
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
   (setf (gpu-render-list gpu)
-        (list* (list (word-to-position v3) (word-to-color #xFF))
-               (list (word-to-position v2) (word-to-color #xFF))
-               (list (word-to-position v1) (word-to-color #xFF))
-               (list (word-to-position v2) (word-to-color #xFF))
-               (list (word-to-position v3) (word-to-color #xFF))
-               (list (word-to-position v4) (word-to-color #xFF))
+        (list* (make-vertex v3 #xFF)
+               (make-vertex v2 #xFF)
+               (make-vertex v1 #xFF)
+               (make-vertex v2 #xFF)
+               (make-vertex v3 #xFF)
+               (make-vertex v4 #xFF)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
@@ -501,12 +522,12 @@
   ; render both faces so that it's visible no matter what. Does this mean the
   ; quads might need 12 vertices..?
   (setf (gpu-render-list gpu)
-        (list* (list (word-to-position v1) (word-to-color color1))
-               (list (word-to-position v2) (word-to-color color2))
-               (list (word-to-position v3) (word-to-color color3))
-               (list (word-to-position v3) (word-to-color color3))
-               (list (word-to-position v2) (word-to-color color2))
-               (list (word-to-position v1) (word-to-color color1))
+        (list* (make-vertex v1 color1)
+               (make-vertex v2 color2)
+               (make-vertex v3 color3)
+               (make-vertex v3 color3)
+               (make-vertex v2 color2)
+               (make-vertex v1 color1)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   0)
@@ -515,6 +536,7 @@
 ; conversion to the shaders. Also, we should use the interal g-pc type.
 (defstruct-g our-vert
   (position :vec2)
+  (uv :vec2)
   (color :vec3))
 
 (defun-g vert-stage ((vert our-vert) &uniform (offset :vec2))
@@ -525,18 +547,21 @@
       (- 1 (/ (aref pos 1) 256.0))
       0
       1f0)
-     (our-vert-color vert))))
+     (our-vert-color vert) (our-vert-uv vert))))
 
-; TODO(Samantha): Add a texture uniform.
-(defun-g frag-stage ((color :vec3))
-  (v! (/ (aref color 0) 255.0)
-      (/ (aref color 1) 255.0)
-      (/ (aref color 2) 255.0)
-      0))
+(defun-g frag-stage ((color :vec3) (uv :vec2)
+                     &uniform (vram :sampler-2d))
+  ; TODO(Samantha): This is just here to test textures. REMOVE ME.
+  (if (= (aref color 0) 255)
+    (texture vram uv)
+    (v! (/ (aref color 0) 255.0)
+        (/ (aref color 1) 255.0)
+        (/ (aref color 2) 255.0)
+        0)))
 
 (defpipeline-g some-pipeline ()
   :vertex (vert-stage our-vert)
-  :fragment (frag-stage :vec3))
+  :fragment (frag-stage :vec3 :vec2))
 
 ; From http://problemkaputt.de/psx-spx.htm#controllersandmemorycards
 ; __Halfword 0 (Controller Info)_______________________________________________
@@ -613,15 +638,20 @@
            (vao (make-gpu-array
                  (gpu-render-list gpu)
                  :element-type 'our-vert))
+           (vram-tex (make-texture (gpu-vram gpu) :element-type :ushort))
+           (vram-sampler (sample vram-tex))
            (buffer-stream (make-buffer-stream
                            vao
                            :length (gpu-render-list-length gpu)
                            :index-array vao-indices)))
       (map-g #'some-pipeline buffer-stream
              :offset (v! (gpu-drawing-offset-x gpu)
-                         (gpu-drawing-offset-y gpu)))
+                         (gpu-drawing-offset-y gpu))
+             :vram vram-sampler)
       (free-buffer-stream buffer-stream)
       (free-gpu-array vao)
+      (free-texture vram-tex)
+      (free-sampler vram-sampler)
       (free-gpu-array vao-indices))
     (swap)
     (setf (gpu-render-list gpu) (list))
@@ -1013,9 +1043,10 @@
 (defun tick-gpu (gpu cpu-clocks)
   "Updates the GPUs state by stepping it through time equal to a number of
    given cpu clocks that have occured since the last tick."
-  (incf (gpu-partial-cycles gpu)
-        (cpu-clocks-to-gpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
-                                  cpu-clocks))
+  (the single-float
+       (incf (gpu-partial-cycles gpu)
+             (cpu-clocks-to-gpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
+                                       cpu-clocks)))
   (let ((previous-scanline (gpu-current-scanline gpu)))
 
     (update-scanline gpu)
