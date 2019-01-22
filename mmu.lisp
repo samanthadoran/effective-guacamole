@@ -288,4 +288,7 @@
    (lambda (address value) (write-half-word* psx address value)))
   (setf
    (psx-cpu:cpu-memory-set-word (psx-cpu psx))
-   (lambda (address value) (write-word* psx address value))))
+   (lambda (address value) (write-word* psx address value)))
+  (setf
+   (psx-cpu:cpu-has-pending-irq (psx-cpu psx))
+   (lambda () (psx-irq:has-pending-irq (psx-irq psx)))))

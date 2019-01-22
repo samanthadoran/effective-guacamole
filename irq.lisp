@@ -2,7 +2,7 @@
   (:nicknames #:irq)
   (:use :cl)
   (:export #:irq #:make-irq #:raise-interrupt #:read-irq #:write-irq
-           #:irq-exception-callback))
+           #:irq-exception-callback #:has-pending-irq))
 
 (in-package :psx-irq)
 (declaim (optimize (speed 3) (safety 1)))
@@ -32,6 +32,15 @@
     (setf (irq-status irq)
           (logior (irq-status irq) (ash 1 interrupt-index)))
     interrupt-index))
+
+(declaim (ftype (function (irq)
+                          boolean)
+                has-pending-irq)
+         (inline has-pending-irq))
+(defun has-pending-irq (irq)
+  (if (zerop (logand (irq-status irq) (irq-mask irq)))
+    nil
+    t))
 
 (declaim (ftype (function (irq (unsigned-byte 8))
                           (unsigned-byte 16))

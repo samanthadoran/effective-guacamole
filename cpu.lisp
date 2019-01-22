@@ -7,7 +7,8 @@
            #:cpu-memory-get-half-word #:cpu-memory-set-half-word
            #:cpu-memory-get-word #:cpu-memory-set-word
            #:power-on #:step-cpu #:trigger-exception
-           #:is-cache-isolated #:tick))
+           #:is-cache-isolated #:tick
+           #:cpu-has-pending-irq))
 
 (in-package :psx-cpu)
 (declaim (optimize (speed 3) (safety 1)))
@@ -112,7 +113,10 @@
    :type (function ((unsigned-byte 32) (unsigned-byte 16)) (unsigned-byte 16)))
   (memory-set-word
    (lambda (address value) (declare (ignore address value)) 0)
-   :type (function ((unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32))))
+   :type (function ((unsigned-byte 32) (unsigned-byte 32)) (unsigned-byte 32)))
+  (has-pending-irq
+   (lambda () nil)
+   :type (function () boolean)))
 
 (declaim (ftype (function (cpu) (unsigned-byte 32)) power-on))
 (defun power-on (cpu)
@@ -362,11 +366,7 @@
     ; TODO(Samantha): This is almost certainly incorrect. An exception should
     ; be a pipeline hazard?
     (if (and
-         (not (zerop (logand
-                      (funcall (cpu-memory-get-half-word cpu)
-                               +irq-registers-begin+)
-                      (funcall (cpu-memory-get-half-word cpu)
-                               (+ +irq-registers-begin+ 4)))))
+         (funcall (cpu-has-pending-irq cpu))
          (ldb-test (byte 1 0) (cop0:cop0-status-register (cpu-cop0 cpu))))
       (trigger-exception cpu :cause :interrupt)
       (execute cpu instruction)))
