@@ -9,6 +9,8 @@
 
 (in-package :psx-renderer)
 
+(declaim (optimize (speed 3) (safety 1)))
+
 ; TODO(Samantha): These probably should be different types. Offload the type
 ; conversion to the shaders.
 (defstruct-g our-vert

@@ -254,11 +254,11 @@
   (setf
    (psx-joypads:controller-buttons-callback (aref (the (simple-array psx-joypads::controller)(psx-joypads:joypads-controllers (psx-joypads psx))) 0))
    (lambda ()
-           (psx-gpu:controller-callback 0)))
+           (psx-input:controller-callback 0)))
   (setf
    (psx-joypads:controller-buttons-callback (aref (the (simple-array psx-joypads::controller)(psx-joypads:joypads-controllers (psx-joypads psx))) 1))
    (lambda ()
-           (psx-gpu:controller-callback 1)))
+           (psx-input:controller-callback 1)))
   (setf
    (psx-timers:timers-exception-callback (psx-timers psx))
    (lambda (keyword)
