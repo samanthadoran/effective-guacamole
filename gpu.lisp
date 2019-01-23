@@ -1,12 +1,14 @@
 (defpackage #:psx-gpu
   (:nicknames #:gpu)
   (:use :cl
-        #:cepl
         #:cepl.skitter.sdl2
         #:rtg-math
         :memory)
-  (:export #:gpu #:make-gpu #:gpu-gpu-stat #:gpu-stat-to-word
-           #:read-gpu #:write-gpu #:gpu-exception-callback #:tick-gpu
+  (:export #:gpu #:gpu-render-list #:gpu-vram #:gpu-drawing-offset-x
+           #:gpu-drawing-offset-y #:gpu-render-list-length
+           #:gpu-render-callback #:gpu-exception-callback #:make-gpu
+           #:read-gpu #:write-gpu #:tick-gpu
+           #:gpu-gpu-stat #:gpu-stat-to-word
            #:controller-callback #:power-on))
 
 (in-package :psx-gpu)
@@ -21,7 +23,7 @@
 ; FIXME...?
 ; TODO(Samantha): This crashes without controllers connected.
 (defparameter *sdl2-pads* nil)
-(defun init-pads ()
+(defun init-pads ())
   ; (unless *sdl2-pads*
   ;   (let ((ids '(0)))
   ;     (setf *sdl2-pads*  (make-array 10 :initial-element nil))
@@ -31,7 +33,6 @@
   ;          (setf (aref *sdl2-pads* id)
   ;                (sdl2:game-controller-open id))))
   ;     (skitter.sdl2:enable-background-joystick-events)))
-  )
 
 ; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
 (defstruct gpu-stat
@@ -172,7 +173,10 @@
   (gp0-op (make-gp0-operation) :type gp0-operation)
   (exception-callback
    (lambda () 0)
-   :type (function () (unsigned-byte 8))))
+   :type (function () (unsigned-byte 8)))
+  (render-callback
+   (lambda () (values))
+   :type (function ())))
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -366,12 +370,13 @@
 (defun make-vertex (position color)
   (list (word-to-position position) (v! 0 0) (word-to-color color)))
 
-(declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
+(declaim (ftype (function ((unsigned-byte 32) (simple-array single-float (2))
+                                              (unsigned-byte 32))
                           list)
                 make-textured-vertex))
 (defun make-textured-vertex (position uv color)
   ; TODO(Samantha): This is very wrong.
-  (list (word-to-position position) (word-to-position uv) (word-to-color color)))
+  (list (word-to-position position) uv (word-to-color color)))
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32)
@@ -399,27 +404,67 @@
                                (unsigned-byte 32))
                           (unsigned-byte 32))
                 render-opaque-texture-blended-quadrilateral))
-(defun render-opaque-texture-blended-quadrilateral (gpu color1
-                                                        v1 texture-coordinate1-and-palette
-                                                        v2 texture-coordinate2-and-texture-page
-                                                        v3 texture-coordinate3
-                                                        v4 texture-coordinate4)
-  (declare (ignore color1 texture-coordinate1-and-palette
-                   texture-coordinate2-and-texture-page texture-coordinate3
-                   texture-coordinate4))
-  (setf (gpu-render-list gpu)
-        (list* (make-vertex v3 #xFF)
-               (make-vertex v2 #xFF)
-               (make-vertex v1 #xFF)
-               (make-vertex v2 #xFF)
-               (make-vertex v3 #xFF)
-               (make-vertex v4 #xFF)
-               (gpu-render-list gpu)))
+(defun render-opaque-texture-blended-quadrilateral
+       (gpu color1
+            v1 texture-coordinate1-and-palette
+            v2 texture-coordinate2-and-texture-page
+            v3 texture-coordinate3
+            v4 texture-coordinate4)
+  (declare (ignore color1))
+  (let* ((palette (ldb (byte 16 16) texture-coordinate1-and-palette))
+         (clut-address-x (* 16 2 (ldb (byte 6 0) palette)))
+         (clut-address-y (ldb (byte 9 6) palette))
+         (texture-page (ldb (byte 16 16) texture-coordinate2-and-texture-page))
+         (texture-page-x-address (* 64 2 (ldb (byte 4 0) texture-page)))
+         (texture-page-y-address (* 256 (ldb (byte 1 4) texture-page))))
+    (declare (ignore clut-address-x clut-address-y))
+    (setf (gpu-render-list gpu)
+          (list* (make-textured-vertex v3 (texture-coordinate-to-word
+                                           texture-coordinate3
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v2 (texture-coordinate-to-word
+                                           texture-coordinate2-and-texture-page
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v1 (texture-coordinate-to-word
+                                           texture-coordinate1-and-palette
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v2 (texture-coordinate-to-word
+                                           texture-coordinate2-and-texture-page
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v3 (texture-coordinate-to-word
+                                           texture-coordinate3
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v4 (texture-coordinate-to-word
+                                           texture-coordinate4
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (gpu-render-list gpu))))
+
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
     (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
              is not fully implemented!~%"))
   0)
+
+(declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32)
+                                             (unsigned-byte 32))
+                          (simple-array single-float (2)))))
+(defun texture-coordinate-to-word (texture-coordinate texture-page-x
+                                                      texture-page-y)
+  (v! (+ texture-page-x (* 2 (ldb (byte 8 0) texture-coordinate)))
+      (+ texture-page-y (* 2 (ldb (byte 8 8) texture-coordinate)))))
+
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
                                (unsigned-byte 32) (unsigned-byte 32)
@@ -428,20 +473,52 @@
                                (unsigned-byte 32))
                           (unsigned-byte 32))
                 render-opaque-raw-textured-quadrilateral))
-(defun render-opaque-raw-textured-quadrilateral (gpu color1
-                                                     v1 texture-coordinate1-and-palette
-                                                     v2 texture-coordinate2-and-texture-page
-                                                     v3 texture-coordinate3
-                                                     v4 texture-coordinate4)
+(defun render-opaque-raw-textured-quadrilateral
+       (gpu color1
+            v1 texture-coordinate1-and-palette
+            v2 texture-coordinate2-and-texture-page
+            v3 texture-coordinate3
+            v4 texture-coordinate4)
   (declare (ignore color1))
-  (setf (gpu-render-list gpu)
-        (list* (make-textured-vertex v3 texture-coordinate3 #xFF)
-               (make-textured-vertex v2 texture-coordinate2-and-texture-page #xFF)
-               (make-textured-vertex v1 texture-coordinate1-and-palette #xFF)
-               (make-textured-vertex v2 texture-coordinate2-and-texture-page #xFF)
-               (make-textured-vertex v3 texture-coordinate3 #xFF)
-               (make-textured-vertex v4 texture-coordinate4 #xFF)
-               (gpu-render-list gpu)))
+  (let* ((palette (ldb (byte 16 16) texture-coordinate1-and-palette))
+         (clut-address-x (* 16 2 (ldb (byte 6 0) palette)))
+         (clut-address-y (ldb (byte 9 6) palette))
+         (texture-page (ldb (byte 16 16) texture-coordinate2-and-texture-page))
+         (texture-page-x-address (* 64 2 (ldb (byte 4 0) texture-page)))
+         (texture-page-y-address (* 256 (ldb (byte 1 4) texture-page))))
+    (declare (ignore clut-address-x clut-address-y))
+    (setf (gpu-render-list gpu)
+          (list* (make-textured-vertex v3 (texture-coordinate-to-word
+                                           texture-coordinate3
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v2 (texture-coordinate-to-word
+                                           texture-coordinate2-and-texture-page
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v1 (texture-coordinate-to-word
+                                           texture-coordinate1-and-palette
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v2 (texture-coordinate-to-word
+                                           texture-coordinate2-and-texture-page
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v3 (texture-coordinate-to-word
+                                           texture-coordinate3
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (make-textured-vertex v4 (texture-coordinate-to-word
+                                           texture-coordinate4
+                                           texture-page-x-address
+                                           texture-page-y-address)
+                                       #xFF)
+                 (gpu-render-list gpu))))
   (incf (gpu-render-list-length gpu) 6)
   (when *debug-gpu*
     (format t "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
@@ -455,11 +532,12 @@
                                (unsigned-byte 32))
                           (unsigned-byte 32))
                 render-semi-transparent-raw-textured-quadrilateral))
-(defun render-semi-transparent-raw-textured-quadrilateral (gpu color1
-                                                               v1 texture-coordinate1-and-palette
-                                                               v2 texture-coordinate2-and-texture-page
-                                                               v3 texture-coordinate3
-                                                               v4 texture-coordinate4)
+(defun render-semi-transparent-raw-textured-quadrilateral
+       (gpu color1
+            v1 texture-coordinate1-and-palette
+            v2 texture-coordinate2-and-texture-page
+            v3 texture-coordinate3
+            v4 texture-coordinate4)
   (declare (ignore color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
@@ -481,9 +559,8 @@
                                (unsigned-byte 32) (unsigned-byte 32))
                           (unsigned-byte 32))
                 render-variable-sized-opaque-raw-textured-quadrilateral))
-(defun render-variable-sized-opaque-raw-textured-quadrilateral (gpu color
-                                                     v1
-                                                     texcoord-and-palette size)
+(defun render-variable-sized-opaque-raw-textured-quadrilateral
+       (gpu color v1 texcoord-and-palette size)
   (declare (ignore texcoord-and-palette color))
   (fill-rectangle gpu #xFF v1 size)
   (when *debug-gpu*
@@ -531,37 +608,6 @@
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
   0)
-
-; TODO(Samantha): These probably should be different types. Offload the type
-; conversion to the shaders. Also, we should use the interal g-pc type.
-(defstruct-g our-vert
-  (position :vec2)
-  (uv :vec2)
-  (color :vec3))
-
-(defun-g vert-stage ((vert our-vert) &uniform (offset :vec2))
-  (let ((pos (+ offset (our-vert-position vert))))
-    (values
-     (v!
-      (- (/ (aref pos 0) 512.0) 1)
-      (- 1 (/ (aref pos 1) 256.0))
-      0
-      1f0)
-     (our-vert-color vert) (our-vert-uv vert))))
-
-(defun-g frag-stage ((color :vec3) (uv :vec2)
-                     &uniform (vram :sampler-2d))
-  ; TODO(Samantha): This is just here to test textures. REMOVE ME.
-  (if (= (aref color 0) 255)
-    (texture vram uv)
-    (v! (/ (aref color 0) 255.0)
-        (/ (aref color 1) 255.0)
-        (/ (aref color 2) 255.0)
-        0)))
-
-(defpipeline-g some-pipeline ()
-  :vertex (vert-stage our-vert)
-  :fragment (frag-stage :vec3 :vec2))
 
 ; From http://problemkaputt.de/psx-spx.htm#controllersandmemorycards
 ; __Halfword 0 (Controller Info)_______________________________________________
@@ -611,52 +657,6 @@
    (ash (if (gamepad-button (gamepad index) 1) 0 1) 13)
    (ash (if (gamepad-button (gamepad index) 0) 0 1) 14)
    (ash (if (gamepad-button (gamepad index) 2) 0 1) 15)))
-
-(defparameter *time* (get-internal-real-time))
-
-(declaim (ftype (function (gpu))
-                draw))
-(defun draw (gpu)
-  (let ((old-time *time*))
-    (setf *time* (get-internal-real-time))
-    (setf (surface-title (current-surface (cepl-context)))
-          (format nil "Effective Guacamole  FPS: ~f" (/ internal-time-units-per-second (- *time* old-time)))))
-  (when (car (gpu-render-list gpu))
-    ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
-    ; work from a separate file or if the cepl instance is somehow
-    ; automagically global?
-    (step-host)
-    (when (mouse-button (mouse) mouse.left)
-      (format t "Pressed the mouse!~%"))
-    (when (window-closing (window 0))
-      (error "Finally.~%"))
-    (decay-events)
-    (clear)
-    (let* ((vao-indices (make-gpu-array
-                         (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
-                         :element-type :USHORT))
-           (vao (make-gpu-array
-                 (gpu-render-list gpu)
-                 :element-type 'our-vert))
-           (vram-tex (make-texture (gpu-vram gpu) :element-type :ushort))
-           (vram-sampler (sample vram-tex))
-           (buffer-stream (make-buffer-stream
-                           vao
-                           :length (gpu-render-list-length gpu)
-                           :index-array vao-indices)))
-      (map-g #'some-pipeline buffer-stream
-             :offset (v! (gpu-drawing-offset-x gpu)
-                         (gpu-drawing-offset-y gpu))
-             :vram vram-sampler)
-      (free-buffer-stream buffer-stream)
-      (free-gpu-array vao)
-      (free-texture vram-tex)
-      (free-sampler vram-sampler)
-      (free-gpu-array vao-indices))
-    (swap)
-    (setf (gpu-render-list gpu) (list))
-    (setf (gpu-render-list-length gpu) 0))
-  (values))
 
 (declaim (ftype (function (gpu (unsigned-byte 32)) (unsigned-byte 32))))
 (defun assign-new-gp0-op (gpu value)
@@ -924,12 +924,8 @@
                 power-on))
 (defun power-on (gpu)
   "Do some housekeeping for the power on of the gpu."
-  ; TODO(Samantha): Will this ever need the gpu in the future?
-  (declare (ignore gpu))
-  (cepl:repl 1024 512)
-  (setf (surface-title (current-surface (cepl-context)))
-        "Effective Guacamole")
-  (init-pads))
+  ; TODO(Samantha): Remove this?
+  (declare (ignore gpu)))
 
 (declaim (ftype (function (keyword)
                           (or
@@ -1060,5 +1056,10 @@
       (setf (gpu-frame-counter gpu)
             (wrap-word (1+ (gpu-frame-counter gpu))))
       (funcall (gpu-exception-callback gpu))
-      (draw gpu)))
+      (funcall (gpu-render-callback gpu))
+      ; Once we're done rendering, the render list needs to be cleared or we
+      ; will just kkeep accumulating old frame data.
+      (setf (gpu-render-list gpu) (list))
+      (setf (gpu-render-list-length gpu) 0)))
+
   (values))

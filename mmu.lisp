@@ -242,6 +242,8 @@
    (lambda ()
            (psx-irq::raise-interrupt (psx-irq psx) :vblank)
            0))
+  (setf (psx-gpu::gpu-render-callback (psx-gpu psx))
+        (lambda () (psx-renderer:draw (psx-gpu psx))))
   (setf
    (psx-joypads:joypads-exception-callback (psx-joypads psx))
    (lambda ()

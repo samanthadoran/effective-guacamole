@@ -52,6 +52,7 @@
 
 (declaim (ftype (function (pathname) (unsigned-byte 32)) setup-and-run))
 (defun setup-and-run (bios-rom-path)
+  (psx-renderer:initialize)
   (let ((psx (make-console bios-rom-path)))
     (loop for cpu-clocks = (step-cpu (psx-cpu psx))
       do (psx-gpu:tick-gpu (psx-gpu psx) cpu-clocks)
