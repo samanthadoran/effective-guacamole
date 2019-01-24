@@ -8,22 +8,19 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
-; TODO(Samantha): I'm not really sure how skitter is supposed to be
-; working with controllers, but the only init I could find was from
-; https://github.com/cbaggers/daft/blob/master/src/input/gamepads.lisp
-; FIXME...?
-; TODO(Samantha): This crashes without controllers connected.
 (defparameter *sdl2-pads* nil)
-(defun init-pads ())
-  ; (unless *sdl2-pads*
-  ;   (let ((ids '(0)))
-  ;     (setf *sdl2-pads*  (make-array 10 :initial-element nil))
-  ;     (sdl2-game-controller-db:load-db)
-  ;     (loop :for id :in ids :do
-  ;        (unless (aref *sdl2-pads* id)
-  ;          (setf (aref *sdl2-pads* id)
-  ;                (sdl2:game-controller-open id))))
-  ;     (skitter.sdl2:enable-background-joystick-events)))
+
+(defun init-pads ()
+  (unless *sdl2-pads*
+    (sdl2-game-controller-db:load-db)
+    (setf *sdl2-pads*
+          (make-array 10 :initial-element nil))
+    (loop for i from 0 to (1- (sdl2:joystick-count)) do
+      (unless (aref *sdl2-pads* i)
+        (when (sdl2:game-controller-p i)
+          (setf (aref *sdl2-pads* i)
+                (sdl2:game-controller-open i)))))
+    (skitter.sdl2:enable-background-joystick-events)))
 
 ; From http://problemkaputt.de/psx-spx.htm#controllersandmemorycards
 ; __Halfword 0 (Controller Info)_______________________________________________
