@@ -1,6 +1,6 @@
 (defpackage #:psx-joypads
   (:nicknames #:joypads)
-  (:use :cl)
+  (:use :cl :psx-memory-card)
   (:export #:joypads #:make-joypads #:joypads-exception-callback
            #:tick-controllers-and-memory-cards #:tick-joypads
            #:read-joypads #:write-joypads #:controller
@@ -87,10 +87,16 @@
   (fired-interrupt nil :type boolean)
   (write-fifo (list) :type list)
   (received-from-controller #xFF :type (unsigned-byte 8))
+  (memory-cards
+   (make-array 2 :element-type 'memory-card
+               :initial-contents (vector (make-and-initialize-memory-card)
+                                         (make-and-initialize-memory-card)))
+   :type (simple-array memory-card (2)))
   (controllers
    (make-array 2 :element-type 'controller
                :initial-contents (vector (make-controller)
-                                         (make-controller :id #xDEAD))))
+                                         (make-controller :id #xDEAD)))
+   :type (simple-array controller (2)))
   ; The joypads/memory cards know nothing about the higher up architecture, so
   ; we just use a closure defined in the mmu to fire off any interrupts.
   (exception-callback
@@ -263,7 +269,8 @@
 
 (declaim (ftype (function (joypads (unsigned-byte 16))
                           single-float)
-                cpu-clocks-to-joypad-clocks))
+                cpu-clocks-to-joypad-clocks)
+         (inline cpu-clocks-to-joypad-clocks))
 (defun cpu-clocks-to-joypad-clocks (joypads cpu-clocks)
   "Converts cpu clock ticks into joypad clock ticks."
   ; TODO(Samantha): Implement.

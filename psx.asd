@@ -16,6 +16,7 @@
   :serial t
   :components (
                (:file "memory-constants")
+               (:file "memory-card" :depends-on ("memory-constants"))
                (:file "cop0")
                (:file "irq")
                (:file "timers")
@@ -25,7 +26,7 @@
                (:file "renderer" :depends-on ("gpu"))
                (:file "input")
                (:file "cdrom")
-               (:file "joypads")
+               (:file "joypads" :depends-on ("memory-card"))
                (:file "spu" :depends-on ("memory-constants"))
                (:file "dma" :depends-on ("memory-constants"))
                (:file "console" :depends-on ("cpu" "cache-control" "memory-constants" "gpu" "dma" "cdrom" "irq" "timers" "joypads" "renderer" "input"))
