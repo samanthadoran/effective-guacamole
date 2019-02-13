@@ -70,19 +70,22 @@
            (mode-irq-at-max-value mode))))
 
 (defstruct timers
-  (clock 0 :type (unsigned-byte 64))
+  ; TODO(Samantha): Figure out why this being 64 bit causes SBCL optimization
+  ; notes to complain.
+  (clock 0 :type (unsigned-byte 62))
   (exception-callback
    (lambda (keyword) (declare (ignore keyword)) 0)
    :type (function (keyword) (unsigned-byte 9)))
   (timers
    (make-array 3
                :element-type 'timer
-               :initial-contents `(,(make-timer :identifier :timer0
-                                                :clock-divider 1)
-                                   ,(make-timer :identifier :timer1
-                                                :clock-divider 8)
-                                   ,(make-timer :identifier :timer2
-                                                :clock-divider 30)))
+               :initial-contents (vector
+                                  (make-timer :identifier :timer0
+                                              :clock-divider 1)
+                                  (make-timer :identifier :timer1
+                                              :clock-divider 8)
+                                  (make-timer :identifier :timer2
+                                              :clock-divider 30)))
    :type (simple-array timer (3))))
 
 (declaim (ftype (function (timer)
