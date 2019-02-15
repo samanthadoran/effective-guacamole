@@ -144,11 +144,11 @@
   (frame-counter 0 :type (unsigned-byte 32))
   (partial-cycles 0f0 :type single-float)
   (vram
-   (make-array '(512 2048)
+   (make-array '(512 1024)
                ; TODO(Samantha): Should this be u8 or u16?
-               :element-type '(unsigned-byte 8)
-               :initial-element #xFF)
-   :type (simple-array (unsigned-byte 8) (512 2048)))
+               :element-type '(unsigned-byte 16)
+               :initial-element #xFFFF)
+   :type (simple-array (unsigned-byte 16) (512 1024)))
   ; TODO(Samantha): Make this a vect for speed
   (render-list (list) :type list)
   (render-list-length 0 :type (unsigned-byte 32))
@@ -286,22 +286,34 @@
       (gp0-operation-required-number-of-arguments
        (gpu-gp0-op gpu))
       0)))
+  ; (setf
+  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
+  ;  (ldb (byte 8 0) value))
+  ; (incf *xpos*)
+  ; (setf
+  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
+  ;  (ldb (byte 8 8) value))
+  ; (incf *xpos*)
+  ; (setf
+  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
+  ;  (ldb (byte 8 16) value))
+  ; (incf *xpos*)
+  ; (setf
+  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
+  ;  (ldb (byte 8 24) value))
+  ; (when (or (>= *xpos* (+ *xsize* *xbase*)) (>= *xpos* 2048))
+  ;   (setf *xpos* *xbase*)
+  ;   (incf *ypos*))
+  ; (format t "Fine, (x: ~D, y: ~D)~%" *xpos* *ypos*)
   (setf
    (aref (gpu-vram gpu) *ypos* *xpos*)
-   (ldb (byte 8 0) value))
+   (ldb (byte 16 0) value))
   (incf *xpos*)
   (setf
    (aref (gpu-vram gpu) *ypos* *xpos*)
-   (ldb (byte 8 8) value))
+   (ldb (byte 16 16) value))
   (incf *xpos*)
-  (setf
-   (aref (gpu-vram gpu) *ypos* *xpos*)
-   (ldb (byte 8 16) value))
-  (incf *xpos*)
-  (setf
-   (aref (gpu-vram gpu) *ypos* *xpos*)
-   (ldb (byte 8 24) value))
-  (when (or (>= *xpos* (+ *xsize* *xbase*)) (>= *xpos* 2048))
+  (when (or (>= *xpos* (+ *xsize* *xbase*)) (>= *xpos* 1024))
     (setf *xpos* *xbase*)
     (incf *ypos*))
   0)
@@ -324,8 +336,9 @@
   ; Create a fake GP0-operation that will load the pixels into vram one by one.
   ; This bypasses needing to inspect GP0(#xA0) to determine the number of
   ; arguments we would need.
-  (setf *xsize* (* 2 (ldb (byte 16 0) size)))
-  (setf *xbase* (* 2 (ldb (byte 16 0) coordinates)))
+  ; (format t "Start.~%")
+  (setf *xsize* (* 1 (ldb (byte 16 0) size)))
+  (setf *xbase* (* 1 (ldb (byte 16 0) coordinates)))
   (setf *xpos* *xbase*)
   (setf *ypos* (ldb (byte 16 16) coordinates))
   (setf (gpu-gp0-op gpu)
@@ -441,11 +454,13 @@
 
 (declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32)
                                              (unsigned-byte 32))
-                          (simple-array single-float (2)))))
+                          (simple-array single-float (2)))
+                texture-coordinate-to-word))
 (defun texture-coordinate-to-word (texture-coordinate texture-page-x
                                                       texture-page-y)
-  (v! (+ texture-page-x (* 2 (ldb (byte 8 0) texture-coordinate)))
-      (+ texture-page-y (* 2 (ldb (byte 8 8) texture-coordinate)))))
+  (v!
+   (+ texture-page-x (* 1 (ldb (byte 8 0) texture-coordinate)))
+   (+ texture-page-y (* 1 (ldb (byte 8 8) texture-coordinate)))))
 
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)

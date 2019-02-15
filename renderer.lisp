@@ -31,12 +31,12 @@
 (defun-g frag-stage ((color :vec3) (uv :vec2)
                      &uniform (vram :sampler-2d))
   ; TODO(Samantha): This is just here to test textures. REMOVE ME.
-  (if (= (aref color 0) 255)
-    (texture vram uv)
+  (if (= (aref uv 0) (aref uv 1) 0)
     (v! (/ (aref color 0) 255.0)
         (/ (aref color 1) 255.0)
         (/ (aref color 2) 255.0)
-        0)))
+        0)
+    (texture vram (v! (/ (aref uv 0) 1024.0) (/ (aref uv 1) 512.0)))))
 
 (defpipeline-g some-pipeline ()
   :vertex (vert-stage our-vert)
@@ -73,7 +73,7 @@
            (vao (make-gpu-array
                  (gpu-render-list gpu)
                  :element-type 'our-vert))
-           (vram-tex (make-texture (gpu-vram gpu) :element-type :ushort))
+           (vram-tex (make-texture (gpu-vram gpu) :element-type :short))
            (vram-sampler (sample vram-tex))
            (buffer-stream (make-buffer-stream
                            vao
