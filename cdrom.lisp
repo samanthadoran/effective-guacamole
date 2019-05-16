@@ -5,7 +5,7 @@
    :fset
    :empty-seq :wb-seq :empty? :size :seq :less-first :with-last)
   (:export #:cdrom #:make-cdrom #:read-cdrom-registers #:write-cdrom-registers
-           #:cdrom-exception-callback))
+           #:cdrom-exception-callback #:cdrom-image))
 
 (in-package :psx-cdrom)
 
@@ -14,6 +14,11 @@
 (defstruct cdrom
   "Encompasses all of the internal state for the cdrom controller, disc, and
   any other information."
+  (image
+   (make-array 0 :fill-pointer 0 :adjustable t
+               :initial-element 0 :element-type '(unsigned-byte 8))
+   :type (array (unsigned-byte 8) *))
+
   (exception-callback
    (lambda () 0)
    :type (function () (unsigned-byte 8)))

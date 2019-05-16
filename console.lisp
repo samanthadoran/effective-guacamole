@@ -35,8 +35,11 @@
       (read-sequence rom stream)
       rom)))
 
-(declaim (ftype (function (psx pathname)) console-on))
-(defun console-on (psx bios-rom-path)
+(declaim (ftype (function (psx pathname &optional pathname)) console-on))
+(defun console-on (psx bios-rom-path &optional iso-path)
+  (when iso-path
+    (setf (psx-cdrom:cdrom-image (psx-cdrom psx))
+          (load-rom-from-file iso-path)))
   (setf (psx-bios-rom psx) (load-rom-from-file bios-rom-path))
   (map-memory psx)
   (psx-cpu:power-on (psx-cpu psx))
