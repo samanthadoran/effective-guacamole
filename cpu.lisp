@@ -338,6 +338,15 @@
   (if (zerop (mod (cpu-current-program-counter cpu) 4))
     (funcall (instruction-operation instruction) cpu instruction)
     (trigger-exception cpu :cause :address-load-error))
+
+  ; TODO(Samantha): Move this somewhere smarter.
+  ; Catches calls to bios putchar, disregarding whether or not tty is enabled.
+  (when (or (and (= #xA0 (instruction-address instruction))
+                 (= (aref (cpu-registers cpu) 9) #x3c))
+            (and (= #xB0 (instruction-address instruction))
+                 (= (aref (cpu-registers cpu) 9) #x3d)))
+    (format t "~c" (code-char (aref (cpu-registers cpu) 4))))
+
   ; TODO(Samantha): We need to finally start working with timing. Many (all?)
   ; of the opcodes take a fixed amount of time with the only variable being
   ; whether or not they are in cache or you hit a pipeline hazard. So, this
