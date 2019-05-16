@@ -42,5 +42,6 @@
 
 (defsystem #:psx/tests
   :depends-on (#:psx #:rove)
-  :components ((:file "tests/cdrom"))
+  :components ((:file "tests/cdrom")
+               (:file "tests/memory-constants"))
   :perform (test-op (o c) (symbol-call :rove '#:run c)))
