@@ -13,9 +13,6 @@
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 3) (debug 3)))
 
-(declaim (boolean *debug-gpu*))
-(defparameter *debug-gpu* nil)
-
 ; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
 (defstruct gpu-stat
   (texture-page-x-base 0 :type (unsigned-byte 4))
@@ -163,8 +160,7 @@
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
   (declare (ignore gpu))
-  (when *debug-gpu*
-    (format t "Reading from gpu-read is unimplemented! Returning 0.~%"))
+  (log:debug "Reading from gpu-read is unimplemented! Returning 0.~%")
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -252,9 +248,8 @@
                 clear-texture-cache))
 (defun clear-texture-cache (gpu value)
   (declare (ignore gpu))
-  (when *debug-gpu*
-    (format t "GP0(#x01): clear-texture-cache is unimplemented ~
-             (because texture cache is not implemented)!~%"))
+  (log:debug "GP0(#x01): clear-texture-cache is unimplemented ~
+             (because texture cache is not implemented)!~%")
   value)
 
 ; TODO(Samantha): Move load-image-word into a lamba within load-image so these
@@ -323,8 +318,7 @@
                 load-image))
 (defun load-image (gpu command coordinates size)
   (declare (ignore command))
-  (when *debug-gpu*
-    (format t "GP0(#xA0): load-image is not fully implemented!~%"))
+  (log:debug "GP0(#xA0): load-image is not fully implemented!~%")
   (setf (gp0-operation-remaining-image-words (gpu-gp0-op gpu))
         (* (ldb (byte 16 0) size) (ldb (byte 16 16) size)))
   (unless (zerop (mod (gp0-operation-remaining-image-words (gpu-gp0-op gpu)) 2))
@@ -355,8 +349,7 @@
                 save-image))
 (defun save-image (gpu command coordinates size)
   (declare (ignore gpu command coordinates size))
-  (when *debug-gpu*
-    (format t "GP0(#xC0): save-image-from-vram is unimplemented!~%"))
+  (log:debug "GP0(#xC0): save-image-from-vram is unimplemented!~%")
   0)
 
 (declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32))
@@ -447,9 +440,8 @@
                  (gpu-render-list gpu))))
 
   (incf (gpu-render-list-length gpu) 6)
-  (when *debug-gpu*
-    (format t "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
-             is not fully implemented!~%"))
+  (log:debug "GP0(#x2C): render-opaque-texture-blended-quadrilateral ~
+             is not fully implemented!~%")
   0)
 
 (declaim (ftype (function ((unsigned-byte 32) (unsigned-byte 32)
@@ -517,9 +509,8 @@
                                        #xFF)
                  (gpu-render-list gpu))))
   (incf (gpu-render-list-length gpu) 6)
-  (when *debug-gpu*
-    (format t "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
-             is not fully implemented!~%"))
+  (log:debug "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
+             is not fully implemented!~%")
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
@@ -547,9 +538,8 @@
                (make-vertex v4 #xFF)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
-  (when *debug-gpu*
-    (format t "GP0(#x2F): render-semi-transparent-raw-textured-quadrilateral ~
-             is not fully implemented!~%"))
+  (log:debug "GP0(#x2F): render-semi-transparent-raw-textured-quadrilateral ~
+             is not fully implemented!~%")
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32)
@@ -560,17 +550,15 @@
        (gpu color v1 texcoord-and-palette size)
   (declare (ignore texcoord-and-palette color))
   (fill-rectangle gpu #xFF v1 size)
-  (when *debug-gpu*
-    (format t "GP0(#x65): render-variable-sized-opaque-raw-textured-quadrilateral ~
-             is not fully implemented!~%"))
+  (log:debug "GP0(#x65): render-variable-sized-opaque-raw-textured-quadrilateral ~
+             is not fully implemented!~%")
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32) (unsigned-byte 32))
                           (unsigned-byte 32))
                 fill-rectangle))
 (defun fill-rectangle (gpu color top-left size)
-  (when *debug-gpu*
-    (format t "GP0(#x02): fill-rectangle  is not implemented correctly!~%"))
+  (log:debug "GP0(#x02): fill-rectangle  is not implemented correctly!~%")
   (let* ((left (logand #x3F0 (ldb (byte 16 0) top-left)))
          (right (+ left (logand #x3F0 (+ #xF (ldb (byte 16 0) size)))))
          (top (logand #x1FF (ldb (byte 16 16) top-left)))
@@ -676,8 +664,7 @@
            :required-number-of-arguments required-arguments
            :current-number-of-arguments 0
            :arguments (list)))
-    (when *debug-gpu*
-      (format t "GP0(#x~2,'0x)~%" (ldb (byte 8 24) value))))
+    (log:debug "GP0(#x~2,'0x)~%" (ldb (byte 8 24) value)))
   0)
 
 (declaim (ftype (function ((unsigned-byte 32))
@@ -769,9 +756,8 @@
   (setf (gpu-gp0-op gpu)
         (make-gp0-operation :current-number-of-arguments 0
                             :required-number-of-arguments 0))
-  (when *debug-gpu*
-    (format t "GP1(#x01) Is not yet implemented! ~
-             (Because the command buffer isn't implemented.)~%"))
+  (log:debug "GP1(#x01) Is not yet implemented! ~
+             (Because the command buffer isn't implemented.)~%")
   0)
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) acknowledge-irq))
@@ -832,8 +818,7 @@
                           (unsigned-byte 32))
                 write-gp1))
 (defun write-gp1 (gpu value)
-  (when *debug-gpu*
-    (format t "GP1(#x~2,'0x)~%" (ldb (byte 8 24) value)))
+  (log:debug "GP1(#x~2,'0x)~%" (ldb (byte 8 24) value))
   (case (ldb (byte 8 24) value)
     (#x00 (gpu-soft-reset gpu))
     (#x01 (reset-command-buffer gpu))

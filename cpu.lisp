@@ -15,9 +15,6 @@
 
 (defvar instructions (make-hash-table :test 'equal))
 
-(declaim (boolean *debug-cpu*))
-(defparameter *debug-cpu* nil)
-
 (defstruct instruction
   "PSX instruction"
   (word 0 :type (unsigned-byte 32))

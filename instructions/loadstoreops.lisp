@@ -191,8 +191,7 @@
   (trigger-exception cpu :cause :coprocessor-unusable))
 
 (def-i-type gte-nop #xC0200
-  (when *debug-cpu*
-    (format t "gte nop?~%")))
+  (log:debug "gte nop?~%"))
 
 ; TODO(Samantha): Consider making this io a bit more generic, it's
 ; frustrating to repeat myself.

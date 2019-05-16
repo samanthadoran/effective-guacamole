@@ -10,9 +10,6 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
-(declaim (boolean *debug-joypads*))
-(defparameter *debug-joypads* nil)
-
 ; Controller is selected by #x01, mem cards by #x81
 
 ; TODO(Samantha): This should maybe change to be something along the lines of
@@ -137,8 +134,7 @@
           nil)
     (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads))
           nil)
-    (when *debug-joypads*
-      (format t "Should be resetting joypad registers..?~%"))
+    (log:debug "Should be resetting joypad registers..?~%")
     nil)
   (make-joypad-control
    :transfer-enabled (ldb-test (byte 1 0) value)
@@ -169,8 +165,7 @@
            (8 (setf result (joypads-joy-mode joypads)))
            (#xA (setf result (joypad-control-to-word (joypads-joy-ctrl joypads))))
            (#xE (setf result (joypads-joy-baud joypads))))
-    (when *debug-joypads*
-      (format t "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset))
+    (log:debug "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset)
     result))
 
 (declaim (ftype (function (joypads (unsigned-byte 4) (unsigned-byte 16))
@@ -195,11 +190,10 @@
                (word-to-joypad-control joypads value)))
     (#xE (setf (joypads-joy-baud joypads)
                value)))
-  (when *debug-joypads*
-    (format t "~%~%Wrote 0x~4,'0x to joypad ~D at offset 0x~1,'0x~%"
-            value
-            (joypad-control-desired-slot (joypads-joy-ctrl joypads))
-            offset))
+  (log:debug "~%~%Wrote 0x~4,'0x to joypad ~D at offset 0x~1,'0x~%"
+             value
+             (joypad-control-desired-slot (joypads-joy-ctrl joypads))
+             offset)
   value)
 
 (declaim (ftype (function (controller)
@@ -255,15 +249,13 @@
         ; it will pull ack low in order to notify it.
         (when (car (controller-transmission-queue controller))
           (setf (controller-acknowledge controller) :low)
-          (when *debug-joypads*
-            (format t "Ack goes low~%"))
+          (log:debug "Ack goes low~%")
           ; TODO(Samantha): This is surely wrong.
           (setf (controller-ack-timer controller) 5f0)
 
           (when (joypad-control-interrupt-on-acknowledge
                  (joypads-joy-ctrl joypads))
-            (when *debug-joypads*
-              (format t "irq-7 signalled.~%"))
+            (log:debug "irq-7 signalled.~%")
             (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads)) t))))))
   (values))
 
@@ -283,8 +275,7 @@
   (when (> (controller-ack-timer controller) 0)
     (decf (controller-ack-timer controller) joypad-clocks)
     (when (<= (controller-ack-timer controller) 0)
-      (when *debug-joypads*
-        (format t "Ack goes high.~%"))
+      (log:debug "Ack goes high.~%")
       (setf (controller-acknowledge controller) :high)))
 
   (values))
@@ -307,7 +298,6 @@
     (when (and (not (joypads-fired-interrupt joypads))
                (joypad-status-has-irq-7 (joypads-joy-stat joypads)))
       (setf (joypads-fired-interrupt joypads) t)
-      (when *debug-joypads*
-        (format t "joy irq. baud: ~A~%" (joypads-joy-baud joypads)))
+      (log:debug "joy irq. baud: ~A~%" (joypads-joy-baud joypads))
       (funcall (joypads-exception-callback joypads))))
   (values))

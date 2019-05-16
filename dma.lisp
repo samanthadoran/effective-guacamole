@@ -8,9 +8,6 @@
 (in-package :psx-dma)
 (declaim (optimize (speed 3) (safety 1)))
 
-(declaim (boolean *debug-dma*))
-(defparameter *debug-dma* nil)
-
 (defstruct channel-control
   ; TODO(Samantha): Preserve unknown bits at the end?
   (direction :to-ram :type keyword)
@@ -265,10 +262,9 @@
                           ; Previous link
                           (ldb (byte 21 0) (wrap-word (- base 4))))))
               (:gpu
-               (when *debug-dma*
-                 (format t "Doing some dma from the gpu to the ram. Gpu-read ~
-                            to 0x~8,'0x~%"
-                         (logand base #x1FFFFC))))
+               (log:debug "Doing some dma from the gpu to the ram. Gpu-read ~
+                          to 0x~8,'0x~%"
+                          (logand base #x1FFFFC)))
               (otherwise
                (error "Unhandled DMA channel to-ram: ~A~%"
                       (channel-port channel)))))

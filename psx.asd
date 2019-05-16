@@ -13,7 +13,8 @@
                #:cepl.skitter.sdl2
                #:varjo
                #:sdl2-game-controller-db
-               #:fset)
+               #:fset
+               #:log4cl)
   :serial t
   :components (
                (:file "memory-constants")

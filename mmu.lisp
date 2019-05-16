@@ -2,9 +2,6 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
-(declaim (boolean *debug-memory*))
-(defparameter *debug-memory* nil)
-
 (declaim (ftype (function (psx (unsigned-byte 32))
                           (unsigned-byte 8))
                 load-byte*))
@@ -104,8 +101,7 @@
                                         (mod address +cdrom-registers-begin+)
                                         value))
       ((in-range +expansion-2-begin+ +expansion-2-size+ address)
-       (when *debug-memory*
-         (format t "Wrote 0x~2,'0x to expansion2 @ 0x~8,'0x!~%" value address))
+       (log:debug "Wrote 0x~2,'0x to expansion2 @ 0x~8,'0x!~%" value address)
        value)
       ((in-range +ram-begin+ +ram-size+ address)
        (setf
@@ -167,32 +163,25 @@
                    value +expansion-2-begin+))
           value)
          ((= address (+ +memory-control-begin+ 8))
-          (when *debug-memory*
-            (format t "Wrote 0x~8,'0x to expansion 1 delay/size!~%" value))
+          (log:debug "Wrote 0x~8,'0x to expansion 1 delay/size!~%" value)
           value)
          ((= address (+ +memory-control-begin+ #xC))
-          (when *debug-memory*
-            (format t "Wrote 0x~8,'0x to expansion 3 delay/size!~%" value))
+          (log:debug "Wrote 0x~8,'0x to expansion 3 delay/size!~%" value)
           value)
          ((= address (+ +memory-control-begin+ #x10))
-          (when *debug-memory*
-            (format t "Wrote 0x~8,'0x to bios delay/size!~%" value))
+          (log:debug "Wrote 0x~8,'0x to bios delay/size!~%" value)
           value)
          ((= address (+ +memory-control-begin+ #x14))
-          (when *debug-memory*
-            (format t "Wrote 0x~8,'0x to spu_delay!~%" value))
+          (log:debug "Wrote 0x~8,'0x to spu_delay!~%" value)
           value)
          ((= address (+ +memory-control-begin+ #x18))
-          (when *debug-memory*
-            (format t "Wrote 0x~8,'0x to cdrom_delay!~%" value))
+          (log:debug "Wrote 0x~8,'0x to cdrom_delay!~%" value)
           value)
          ((= address (+ +memory-control-begin+ #x1C))
-          (when *debug-memory*
-            (format t "Wrote 0x~8,'0x to expansion 2 delay/size!~%" value))
+          (log:debug "Wrote 0x~8,'0x to expansion 2 delay/size!~%" value)
           value)
          ((= address (+ +memory-control-begin+ #x20))
-          (when *debug-memory*
-            (format t "Wrote 0x~8,'0x to common delay!~%" value))
+          (log:debug "Wrote 0x~8,'0x to common delay!~%" value)
           value)
          (t
           (error "Unexpected write of 0x~8,'0x! to Memory Control ~
@@ -203,8 +192,7 @@
                           (mod address +irq-registers-begin+)
                           value))
       ((= address +ram-size-begin+)
-       (when *debug-memory*
-         (format t "Wrote 0x~8,'0x to ram size!~%" value))
+       (log:debug "Wrote 0x~8,'0x to ram size!~%" value)
        value)
       ((= address +cache-control+)
        (psx-cache-control:write-cache-control

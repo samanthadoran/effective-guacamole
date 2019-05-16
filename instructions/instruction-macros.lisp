@@ -36,16 +36,15 @@
                           (cpu-pending-load-value cpu))
        (setf (cpu-pending-load-register cpu) 0)
        (setf (cpu-pending-load-value cpu) 0)
-       (when *debug-cpu*
-         (format t "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) #x~4,'0x~%"
-                 (instruction-address instruction)
-                 (instruction-segment instruction)
-                 (instruction-mnemonic instruction)
-                 target-register-index
-                 target-register-value
-                 source-register-index
-                 source-register-value
-                 immediate))
+       (log:debug "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) #x~4,'0x~%"
+                  (instruction-address instruction)
+                  (instruction-segment instruction)
+                  (instruction-mnemonic instruction)
+                  target-register-index
+                  target-register-value
+                  source-register-index
+                  source-register-value
+                  immediate)
        ,@body)))
 
 (defmacro def-j-type (name opcode &body body)
@@ -59,12 +58,11 @@
                          (cpu-pending-load-value cpu))
       (setf (cpu-pending-load-register cpu) 0)
       (setf (cpu-pending-load-value cpu) 0)
-      (when *debug-cpu*
-        (format t "#x~8,'0x(~A): ~A #x~6,'0x~%"
-                (instruction-address instruction)
-                (instruction-segment instruction)
-                (instruction-mnemonic instruction)
-                jump-target))
+      (log:debug "#x~8,'0x(~A): ~A #x~6,'0x~%"
+                 (instruction-address instruction)
+                 (instruction-segment instruction)
+                 (instruction-mnemonic instruction)
+                 jump-target)
       ,@body)))
 
 (defmacro def-r-type (name opcode &body body)
@@ -94,15 +92,14 @@
                           (cpu-pending-load-value cpu))
        (setf (cpu-pending-load-register cpu) 0)
        (setf (cpu-pending-load-value cpu) 0)
-       (when *debug-cpu*
-         (format t "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) $~D(#x~8,'0x)~%"
-                 (instruction-address instruction)
-                 (instruction-segment instruction)
-                 (instruction-mnemonic instruction)
-                 destination-register-index
-                 destination-register-value
-                 source-register-index
-                 source-register-value
-                 target-register-index
-                 target-register-value))
+       (log:debug "#x~8,'0x(~A): ~A $~D(#x~8,'0x) $~D(#x~8,'0x) $~D(#x~8,'0x)~%"
+                  (instruction-address instruction)
+                  (instruction-segment instruction)
+                  (instruction-mnemonic instruction)
+                  destination-register-index
+                  destination-register-value
+                  source-register-index
+                  source-register-value
+                  target-register-index
+                  target-register-value)
        ,@body)))
