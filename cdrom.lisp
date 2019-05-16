@@ -1,6 +1,9 @@
 (defpackage #:psx-cdrom
   (:nicknames #:cdrom)
   (:use :cl)
+  (:import-from
+   :fset
+   :empty-seq :wb-seq :empty? :size :seq :less-first :with-last)
   (:export #:cdrom #:make-cdrom #:read-cdrom-registers #:write-cdrom-registers
            #:cdrom-exception-callback))
 
@@ -8,292 +11,177 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
-(declaim (boolean *debug-cdrom*))
-(defparameter *debug-cdrom* nil)
-
-(defstruct status-register
-  ; TODO(Samantha): The flags in this register seem awkwardly redundant to me.
-  ; I'm not sure I completely understand.
-  (index 0 :type (unsigned-byte 2))
-  (xa-adpcm-fifo-has-contents nil :type boolean)
-  (parameter-fifo-is-empty t :type boolean)
-  (parameter-fifo-is-full nil :type boolean)
-  (response-fifo-is-empty t :type boolean)
-  (data-fifo-is-empty t :type boolean)
-  (busy nil :type boolean))
-
-(declaim (ftype (function (status-register)
-                          (unsigned-byte 8))
-                status-register-to-word))
-(defun status-register-to-word (status-register)
-  (logior
-   (ash (status-register-index status-register) 0)
-   (ash (if (status-register-xa-adpcm-fifo-has-contents status-register) 1 0) 2)
-   (ash (if (status-register-parameter-fifo-is-empty status-register) 1 0) 3)
-   (ash (if (status-register-parameter-fifo-is-full status-register) 0 1) 4)
-   (ash (if (status-register-response-fifo-is-empty status-register) 0 1) 5)
-   (ash (if (status-register-data-fifo-is-empty status-register) 0 1) 6)
-   (ash (if (status-register-busy status-register) 1 0) 7)))
-
-(declaim (ftype (function ((unsigned-byte 8) status-register)
-                          (unsigned-byte 8))
-                word-to-status-register))
-(defun word-to-status-register (word status-register)
-  ; Only the index is writable in the status register, ignore everything else.
-  (setf (status-register-index status-register) (ldb (byte 2 0) word)))
-
-(defstruct interrupt-enable
-  (int1 nil :type boolean)
-  (int2 nil :type boolean)
-  (int3 nil :type boolean)
-  (int4 nil :type boolean)
-  (int5 nil :type boolean))
-
-(declaim (ftype (function (interrupt-enable)
-                          (unsigned-byte 8))
-                interrupt-enable-to-word))
-(defun interrupt-enable-to-word (interrupt-enable)
-  (logior
-   (ash (if (interrupt-enable-int1 interrupt-enable) 1 0) 0)
-   (ash (if (interrupt-enable-int2 interrupt-enable) 1 0) 1)
-   (ash (if (interrupt-enable-int3 interrupt-enable) 1 0) 2)
-   (ash (if (interrupt-enable-int4 interrupt-enable) 1 0) 3)
-   (ash (if (interrupt-enable-int5 interrupt-enable) 1 0) 4)))
-
-(declaim (ftype (function ((unsigned-byte 8))
-                          interrupt-enable)
-                word-to-interrupt-enable))
-(defun word-to-interrupt-enable (word)
-  (make-interrupt-enable
-   :int1 (ldb-test (byte 1 0) word)
-   :int2 (ldb-test (byte 1 1) word)
-   :int3 (ldb-test (byte 1 2) word)
-   :int4 (ldb-test (byte 1 3) word)
-   :int5 (ldb-test (byte 1 4) word)))
-
 (defstruct cdrom
+  "Encompasses all of the internal state for the cdrom controller, disc, and
+  any other information."
   (exception-callback
    (lambda () 0)
    :type (function () (unsigned-byte 8)))
-  (parameter-fifo (list) :type list)
-  (parameter-fifo-tail (list) :type list)
-  (parameter-fifo-length 0 :type (unsigned-byte 8))
-  (response-fifo (list) :type list)
-  (response-fifo-tail (list) :type list)
-  (response-fifo-length 0 :type (unsigned-byte 8))
-  (interrupts-pending
-   (make-array 11 :element-type 'boolean :initial-element nil)
-   :type (simple-array boolean (11)))
-  (status (make-status-register) :type status-register)
-  (interrupt-enable (make-interrupt-enable) :type interrupt-enable))
+  (interrupt-enable #xFF :type (unsigned-byte 8))
+  (interrupt-status #x00 :type (unsigned-byte 8))
+  (index 0 :type (unsigned-byte 2))
+  (command-busy nil :type boolean)
 
-(declaim (ftype (function (cdrom (unsigned-byte 8))
+  ;; TODO(Samantha): Specialize on wb-seq?
+  (remaining-interrupts (empty-seq) :type wb-seq)
+  (data-fifo (empty-seq) :type wb-seq)
+  (xa-adpcm-fifo (empty-seq) :type wb-seq)
+  (response-fifo (empty-seq) :type wb-seq)
+  (parameter-fifo (empty-seq) :type wb-seq))
+
+(declaim (ftype (function (cdrom)
                           (unsigned-byte 8))
-                acknowledge-interrupts))
-(defun acknowledge-interrupts (cdrom word )
-  (when (/= (ldb (byte 3 0) word) 7)
-    (error "We're not clearing all the irq bits? Uhhh....Word is #x~8,'0x~%"
-           word))
-  (loop for i from 1 to 7
-    do (setf (aref (cdrom-interrupts-pending cdrom) i) nil))
-  (when (ldb-test (byte 1 3) word)
-    (setf (aref (cdrom-interrupts-pending cdrom) 8) nil))
-  (when (ldb-test (byte 1 4) word)
-    (setf (aref (cdrom-interrupts-pending cdrom) 10) nil))
-  ; Acking the interrupts clears the response fifo.
-  ; TODO(Samantha): When you ack all of them, or on any ack?
-  (when (ldb-test (byte 8 0) word)
-    (clear-response-fifo cdrom))
-  word)
+                status-register))
+(defun status-register (cdrom)
+  "Make a psx status register as an eight-bit value from the cdrom."
+  ; TODO(Samantha): This is painfully error prone, fixme?
+  (logior
+   (ash (cdrom-index cdrom) 0)
+   (ash (if (empty? (cdrom-xa-adpcm-fifo cdrom)) 0 1) 2)
+   (ash (if (empty? (cdrom-parameter-fifo cdrom)) 1 0) 3)
+   (ash (if (= 16 (size (cdrom-parameter-fifo cdrom))) 0 1) 4)
+   (ash (if (empty? (cdrom-response-fifo cdrom)) 0 1) 5)
+   (ash (if (empty? (cdrom-data-fifo cdrom)) 0 1) 6)
+   (ash (if (cdrom-command-busy cdrom) 1 0) 7)))
 
-(declaim (ftype (function (cdrom))
-                clear-parameter-fifo))
-(defun clear-parameter-fifo (cdrom)
-  (setf (status-register-parameter-fifo-is-empty (cdrom-status cdrom)) t)
-  (setf (status-register-parameter-fifo-is-full (cdrom-status cdrom)) nil)
-  (setf (cdrom-parameter-fifo cdrom) (list))
-  (setf (cdrom-parameter-fifo-tail cdrom) (list))
-  (setf (cdrom-parameter-fifo-length cdrom) 0)
-  (values))
-
-(declaim (ftype (function (cdrom))
-                clear-response-fifo))
-(defun clear-response-fifo (cdrom)
-  (setf (status-register-response-fifo-is-empty (cdrom-status cdrom)) t)
-  (setf (cdrom-response-fifo cdrom) (list))
-  (setf (cdrom-response-fifo-tail cdrom) (list))
-  (setf (cdrom-response-fifo-length cdrom) 0)
-  (values))
-
-(declaim (ftype (function (cdrom (unsigned-byte 8))
-                          (unsigned-byte 8))
-                word-to-interrupt-flag))
-(defun word-to-interrupt-flag (cdrom word)
-  (when (ldb-test (byte 5 0) word)
-    (acknowledge-interrupts cdrom word))
-  (when (ldb-test (byte 1 6) word)
-    (clear-parameter-fifo cdrom))
-  word)
-
-(declaim (ftype (function (cdrom (unsigned-byte 8))
-                          (unsigned-byte 8))
-                write-parameter-fifo))
-(defun write-parameter-fifo (cdrom word)
-  (incf (cdrom-parameter-fifo-length cdrom))
-  (setf (status-register-parameter-fifo-is-empty (cdrom-status cdrom)) nil)
-  (when (= (cdrom-parameter-fifo-length cdrom) 16)
-    (setf (status-register-parameter-fifo-is-full (cdrom-status cdrom)) t))
-  (if (not (car (cdrom-parameter-fifo cdrom)))
-    (progn
-     (setf (cdrom-parameter-fifo cdrom) (list word))
-     (setf (cdrom-parameter-fifo-tail cdrom) (cdrom-parameter-fifo cdrom)))
-    (progn
-     (setf (cdr (cdrom-parameter-fifo-tail cdrom))
-           (list word))
-     (setf (cdrom-parameter-fifo-tail cdrom)
-           (cdr (cdrom-parameter-fifo-tail cdrom)))))
-  word)
+ (declaim (ftype (function (cdrom (unsigned-byte 8)))
+                 write-status-register))
+ (defun write-status-register (cdrom value)
+   "Handle writes to the status register of the CDROM. All fields in this
+   register are immuatable, other than the index field. As such, only
+   bits [0, 2] matter as input to this function."
+   (setf (cdrom-index cdrom)
+         (ldb (byte 2 0) value))
+   (values))
 
 (declaim (ftype (function (cdrom)
                           (unsigned-byte 8))
                 read-response-fifo))
 (defun read-response-fifo (cdrom)
-  (let ((response 0))
-    (when (car (cdrom-response-fifo cdrom))
-      (decf (cdrom-response-fifo-length cdrom))
-      (setf response (car (cdrom-response-fifo cdrom)))
-      (setf (cdrom-response-fifo cdrom) (cdr (cdrom-response-fifo cdrom)))
-      (unless (car (cdrom-response-fifo cdrom))
-        (clear-response-fifo cdrom)))
-    (when *debug-cdrom*
-      (format t "Read response #x~2,'0x~%" response))
+  "Reads the first value in the response fifo and then progresses it to
+  the next. If the response fifo is empty, returns 0."
+  (let ((response (or (fset:first (cdrom-response-fifo cdrom))
+                      0)))
+    (setf (cdrom-response-fifo cdrom)
+          (less-first (cdrom-response-fifo cdrom)))
     response))
 
-(declaim (ftype (function (cdrom (unsigned-byte 8))
-                          (unsigned-byte 8))
-                write-response-fifo))
-(defun write-response-fifo (cdrom word)
-  (setf (status-register-response-fifo-is-empty (cdrom-status cdrom)) nil)
-  (incf (cdrom-response-fifo-length cdrom))
-  (if (not (car (cdrom-response-fifo cdrom)))
-    (progn
-     (setf (cdrom-response-fifo cdrom) (list word))
-     (setf (cdrom-response-fifo-tail cdrom) (cdrom-response-fifo cdrom)))
-    (progn
-     (setf (cdr (cdrom-response-fifo-tail cdrom))
-           (list word))
-     (setf (cdrom-response-fifo-tail cdrom)
-           (cdr (cdrom-response-fifo-tail cdrom)))))
-  word)
+(declaim (ftype (function (cdrom (unsigned-byte 8)))
+                write-parameter-fifo))
+(defun write-parameter-fifo (cdrom value)
+  "Handles adding items to the parameter fifo. If there are 16 items in
+  the fifo, it throws the given value away."
+  ; TODO(Samantha): Verify behaviour past 16 values?
+  (unless (= 16 (size (cdrom-parameter-fifo cdrom)))
+    (setf (cdrom-parameter-fifo cdrom)
+          (with-last (cdrom-parameter-fifo cdrom) value))))
 
 (declaim (ftype (function (cdrom)
-                          boolean)
-                remaining-interrupts))
-(defun remaining-interrupts (cdrom)
-  (reduce (lambda (x y) (or x y)) (cdrom-interrupts-pending cdrom)))
-
-(declaim (ftype (function (cdrom (unsigned-byte 8))
                           (unsigned-byte 8))
-                write-command-word))
-(defun write-command-word (cdrom word)
-  (unless (status-register-busy (cdrom-status cdrom))
-    (unless (remaining-interrupts cdrom)
-      (case word
-        (#x1
-          (when *debug-cdrom*
-            (format t "Command #x1: GetStat~%"))
-          ; TODO(Samantha): Spec out the proper cdrom stat register.
-          (write-response-fifo cdrom #x10)
-          (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
-          (funcall (cdrom-exception-callback cdrom)))
-        (#x19
-          (unless (=
-                   (the (unsigned-byte 8) (car (cdrom-parameter-fifo cdrom)))
-                   #x20)
-            (error "Unrecognized test subfunction #x~2,'0x~%"
-                   (car (cdrom-parameter-fifo cdrom))))
-          (when *debug-cdrom*
-            (format t "Command #x19(#x20): Self Test.~%"))
-          (write-response-fifo cdrom #x97)
-          (write-response-fifo cdrom #x01)
-          (write-response-fifo cdrom #x10)
-          (write-response-fifo cdrom #xC2)
-          (setf (aref (cdrom-interrupts-pending cdrom) 3) t)
-          (funcall (cdrom-exception-callback cdrom)))
-        (otherwise (error "Unhandled CDrom command word #x~2,'0x~%" word)))
-      (clear-parameter-fifo cdrom)))
-  word)
+                get-stat))
+(defun get-stat (cdrom)
+  (declare (ignore cdrom))
+  ; TODO(Samantha): Actually implement this.
+  #x10)
+
+(declaim (ftype (function (cdrom (unsigned-byte 8)))
+                write-interrupt-flag))
+(defun write-interrupt-flag (cdrom value)
+  "Handles the various bookkeeping of writing to the interrupt flag register."
+  (when (ldb-test (byte 5 0) value)
+    ; The behaviour over not clearing all response bits is a bit odd, ignore
+    ; for now?
+    (unless (= (ldb (byte 3 0) value) 7)
+      (error "We don't handle not clearing all of the irq bits."))
+    ; TODO(Samantha): Handle interrupts past int 5.
+    (setf (cdrom-remaining-interrupts cdrom)
+          (less-first (cdrom-remaining-interrupts cdrom))))
+
+  (when (ldb-test (byte 1 6) value)
+    (setf (cdrom-parameter-fifo cdrom)
+          (empty-seq)))
+
+  (values))
+
+(declaim (ftype (function (cdrom (unsigned-byte 8)))
+                raise-cdrom-interrupt))
+(defun raise-cdrom-interrupt (cdrom interrupt)
+  "Conditionally adds a pending interrupt to the queue depending on the mask."
+  ; TODO(Samantha): We can only mask interrupts [1, 5]? Verify.
+  (when (or (ldb-test (byte 1 (1- interrupt)) (cdrom-interrupt-enable cdrom))
+            (> interrupt 5))
+    ; TODO(Samantha): This needs to move to a cdrom-tick.
+    (funcall (cdrom-exception-callback cdrom))
+    (setf (cdrom-remaining-interrupts cdrom)
+          (with-last (cdrom-remaining-interrupts cdrom) interrupt)))
+  (values))
+
+(declaim (ftype (function (cdrom (unsigned-byte 8)))
+                write-command))
+(defun write-command (cdrom command)
+  ; TODO(Samantha): Find a place for delay timing of the parameter fifo
+  ; transferring to the controller. The IRQ should _not_ fire immediately.
+  (when (cdrom-command-busy cdrom)
+    (error "Trying to send a command while the busy flag is up is not good!"))
+
+  (unless (empty? (cdrom-remaining-interrupts cdrom))
+    (error "Remaining interrupts should be false because command isn't busy."))
+
+  (ecase command
+         ;; GetStat
+         (#x1
+           (setf (cdrom-response-fifo cdrom)
+                 (with-last (cdrom-response-fifo cdrom) #x10))
+
+           (raise-cdrom-interrupt cdrom #x3))
+         ;; Tests with subfunctions
+         (#x19
+           (ecase (fset:first (cdrom-parameter-fifo cdrom))
+                  ;; cdrom bios version
+                  (#x20
+                    (setf (cdrom-response-fifo cdrom)
+                          (seq #x97 #x01 #x10 #xC2))
+
+                    (raise-cdrom-interrupt cdrom #x3)))))
+
+  ; TODO(Samantha): This isn't really how this works. Transmission takes time.
+  (setf (cdrom-parameter-fifo cdrom)
+        (empty-seq))
+  (values))
 
 (declaim (ftype (function (cdrom (unsigned-byte 2))
                           (unsigned-byte 8))
                 read-cdrom-registers))
 (defun read-cdrom-registers (cdrom offset)
-  (when *debug-cdrom*
-    (format t "Read from cdrom offset #x~1,'0x with index #x~1,'0x~%"
-            offset (status-register-index (cdrom-status cdrom))))
-  (case offset
-    (0 (status-register-to-word (cdrom-status cdrom)))
-    (1
-      (case (status-register-index (cdrom-status cdrom))
-           (1 (read-response-fifo cdrom))
-           (otherwise
-            (error "Unhandled read from cdrom offset 1 with index #x~1,'0x. ~
-                    We only handle index 1 for now.~%"
-                   (status-register-index (cdrom-status cdrom))))))
-    ; (2)
-    (3 (case (status-register-index (cdrom-status cdrom))
-         (0 (interrupt-enable-to-word (cdrom-interrupt-enable cdrom)))
-         ; TODO(Samantha): Move this out to a function and actually set these
-         ; values instead of just putting magic numbers.
-         (1 (logior
-             (ash (if (remaining-interrupts cdrom) #x3 0) 0)
-             (ash 0 3)
-             (ash (if (remaining-interrupts cdrom) 0 0) 4)
-             (ash #x7 5)))
-         (2 (interrupt-enable-to-word (cdrom-interrupt-enable cdrom)))
-         (otherwise (error "Unhandled read from cdrom offset 3 with index ~
-                            #x~1,'0x. We only handle index 0 and 2 for now.~%"
-                           (status-register-index (cdrom-status cdrom))))))
-    (otherwise (error "Unhandled cdrom read at offset #x~1,'0x with ~
-                       index #x~1,'0x~%"
-                      offset (status-register-index (cdrom-status cdrom))))))
+  (ecase offset
+         (0 (status-register cdrom))
+         (1 (ecase (cdrom-index cdrom)
+                   (1
+                    (let ((response
+                           (or (fset:first (cdrom-response-fifo cdrom))
+                               0)))
+                      (setf (cdrom-response-fifo cdrom)
+                            (less-first (cdrom-response-fifo cdrom)))
+                      response))))
+         (3 (ecase (cdrom-index cdrom)
+                   (0 (cdrom-interrupt-enable cdrom))
+                   (1 (fset:first (cdrom-remaining-interrupts cdrom)))
+                   (2 (cdrom-interrupt-enable cdrom))
+                   (3 (fset:first (cdrom-remaining-interrupts cdrom)))))))
 
 (declaim (ftype (function (cdrom (unsigned-byte 2) (unsigned-byte 8))
                           (unsigned-byte 8))
                 write-cdrom-registers))
 (defun write-cdrom-registers (cdrom offset value)
-  (when *debug-cdrom*
-    (format t "Write of value #x~2,'0x to cdrom offset #x~1,'0x with ~
-               index #x~1,'0x~%"
-            value offset (status-register-index (cdrom-status cdrom))))
-  (case offset
-    (0 (word-to-status-register value (cdrom-status cdrom)))
-    (1
-      (case (status-register-index (cdrom-status cdrom))
-        ; Command word.
-        (0
-         (write-command-word cdrom value))
-        (otherwise (error "Got a write to cdrom offset #x1 with ~
-                           index #x~1,'0x. Only Offset #x0 is handled for now.~%"
-                          (status-register-index (cdrom-status cdrom))))))
-    (2
-     (case (status-register-index (cdrom-status cdrom))
-       ; Parameter FIFO.
-       (0
-        (write-parameter-fifo cdrom value))
-       (1
-        (setf (cdrom-interrupt-enable cdrom)
-              (word-to-interrupt-enable value)))
-       (otherwise (error "Got a write to cdrom offset #x2 with ~
-                          index #x~1,'0x. Only Offset #x1 is handled for now.~%"
-                         (status-register-index (cdrom-status cdrom))))))
-    (3
-     (case (status-register-index (cdrom-status cdrom))
-       (1 (word-to-interrupt-flag cdrom value))
-       (otherwise (error "Got a write to cdrom offset #x3 with ~
-                        index #x~1,'0x. Only Offsets #x1 are handled for now.~%"
-                         (status-register-index (cdrom-status cdrom))))))
-    (otherwise (error "Unhandled cdrom write of #x~2,'0x at offset #x~1,'0x ~
-                       with index #x~1,'0x~%"
-                      value offset (status-register-index (cdrom-status cdrom)))))
+  (ecase offset
+         (0 (write-status-register cdrom value))
+         (1 (ecase (cdrom-index cdrom)
+                   (0 (write-command cdrom value))))
+         (2 (ecase (cdrom-index cdrom)
+                   (0 (write-parameter-fifo cdrom value))
+                   (1
+                    (setf (cdrom-interrupt-enable cdrom)
+                          value))))
+         (3 (ecase (cdrom-index cdrom)
+                   (1 (write-interrupt-flag cdrom value)))))
   value)
