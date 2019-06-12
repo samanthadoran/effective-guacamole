@@ -9,6 +9,10 @@
 
 (defstruct psx
   "A model psx"
+  (clock 0 :type (unsigned-byte 64))
+  (sync-events
+   (make-hash-table :test 'equal)
+   :type hash-table)
   (cpu (make-cpu) :type cpu)
   (irq (psx-irq:make-irq) :type psx-irq:irq)
   (timers (psx-timers:make-timers) :type psx-timers:timers)
@@ -53,16 +57,37 @@
     (console-on my-psx bios-rom-path)
     my-psx))
 
+
+(declaim (ftype (function (psx
+                           (function ((unsigned-byte 64)))
+                           (unsigned-byte 64)))
+                register-sync-event))
+(defun register-sync-event (psx event clock)
+  (setf (gethash clock (psx-sync-events psx))
+        (cons event (gethash clock (psx-sync-events psx))))
+  (values))
+
 (declaim (ftype (function (pathname) (unsigned-byte 32)) setup-and-run))
 (defun setup-and-run (bios-rom-path)
   (psx-renderer:initialize)
   (psx-input:init-pads)
   (let ((psx (make-console bios-rom-path)))
-    (loop for cpu-clocks = (step-cpu (psx-cpu psx))
-      do (psx-gpu:tick-gpu (psx-gpu psx) cpu-clocks)
+    (loop for cpu-clocks = (step-cpu (psx-cpu psx)) for previous-clock = (psx-clock psx)
+      do (incf (psx-clock psx) cpu-clocks)
+
+      ; Only sync when necessary.
+      (unless (zerop (hash-table-count (psx-sync-events psx)))
+        (loop for clock from previous-clock to (psx-clock psx) for events = (gethash clock (psx-sync-events psx))
+          do (when events
+               (mapcar (lambda (event) (funcall event
+                                                (psx-clock psx)))
+                       events)
+               (remhash clock (psx-sync-events psx)))))
+
+      ; do (psx-gpu:tick-gpu (psx-gpu psx) cpu-clocks)
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
       ; TODO(Samantha): Timers is dog slow, optimize it.
-      do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)
+      ; do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)
       do (psx-joypads:tick-joypads (psx-joypads psx) cpu-clocks)))
   0)

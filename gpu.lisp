@@ -6,12 +6,12 @@
   (:export #:gpu #:gpu-render-list #:gpu-vram #:gpu-drawing-offset-x
            #:gpu-drawing-offset-y #:gpu-render-list-length
            #:gpu-render-callback #:gpu-exception-callback #:make-gpu
-           #:read-gpu #:write-gpu #:tick-gpu
-           #:gpu-gpu-stat #:gpu-stat-to-word
+           #:read-gpu #:write-gpu #:tick-gpu #:gpu-sync-callback
+           #:gpu-gpu-stat #:gpu-stat-to-word #:sync
            #:power-on))
 
 (in-package :psx-gpu)
-(declaim (optimize (speed 3) (safety 3) (debug 3)))
+(declaim (optimize (speed 3) (safety 1)))
 
 ; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
 (defstruct gpu-stat
@@ -115,6 +115,7 @@
 
 (defstruct gpu
   "A model psx gpu"
+  (system-clock 0 :type (unsigned-byte 64))
   (gpu-stat (make-gpu-stat) :type gpu-stat)
   ; Not sure how to group the following variables. Maybe some sort of
   ; render-settings struct?
@@ -137,7 +138,7 @@
   (display-start-y 0 :type (unsigned-byte 10))
   (display-end-y 0 :type (unsigned-byte 10))
   (current-scanline 0 :type (unsigned-byte 16))
-  (current-scanline-cycles 0 :type (unsigned-byte 16))
+  (current-scanline-cycles 0 :type (unsigned-byte 64))
   (frame-counter 0 :type (unsigned-byte 32))
   (partial-cycles 0f0 :type single-float)
   (vram
@@ -150,6 +151,9 @@
   (render-list (list) :type list)
   (render-list-length 0 :type (unsigned-byte 32))
   (gp0-op (make-gp0-operation) :type gp0-operation)
+  (sync-callback
+   (lambda (func clock) (declare (ignore func clock)))
+   :type (function ((function ((unsigned-byte 64))) (unsigned-byte 64))))
   (exception-callback
    (lambda () 0)
    :type (function () (unsigned-byte 8)))
@@ -795,7 +799,16 @@
                 set-display-bounds-vertical))
 (defun set-display-bounds-vertical (gpu value)
   (setf (gpu-display-start-y gpu) (ldb (byte 10 0) value))
-  (setf (gpu-display-end-y gpu) (ldb (byte 10 10) value)))
+  (setf (gpu-display-end-y gpu) (ldb (byte 10 10) value))
+  (funcall
+   (gpu-sync-callback gpu)
+   (lambda (clock) (sync gpu clock))
+   (truncate (gpu-clocks-to-cpu-clocks
+              (gpu-stat-video-mode (gpu-gpu-stat gpu))
+              (* (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu)))
+                 (abs (- (1+ (gpu-display-end-y gpu))
+                         (gpu-current-scanline gpu)))))))
+  0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))
@@ -858,7 +871,9 @@
 (defun power-on (gpu)
   "Do some housekeeping for the power on of the gpu."
   ; TODO(Samantha): Remove this?
-  (declare (ignore gpu)))
+  ; TODO(Samantha): I had wanted to set the first sync here, but display-end-y
+  ; isn't set for awhile. Oops?
+  )
 
 (declaim (ftype (function (keyword)
                           (or
@@ -910,13 +925,21 @@
        scanline
        (gpu-display-end-y gpu))))
 
-(declaim (ftype (function (keyword (unsigned-byte 16))
+(declaim (ftype (function (keyword (unsigned-byte 64))
                           single-float)
                 cpu-clocks-to-gpu-clocks)
          (inline cpu-clocks-to-gpu-clocks))
 (defun cpu-clocks-to-gpu-clocks (video-mode cpu-clocks)
   "Converts cpu clocks into gpu clocks depending on the video mode."
   (* (/ (gpu-clock-speed video-mode) 33.868) cpu-clocks))
+
+(declaim (ftype (function (keyword (unsigned-byte 64))
+                          single-float)
+                gpu-clocks-to-cpu-clocks)
+         (inline gpu-clocks-to-cpu-clocks))
+(defun gpu-clocks-to-cpu-clocks (video-mode gpu-clocks)
+  "Converts gpu clocks into cpu clocks depending on the video mode."
+  (* gpu-clocks (/ 33.868 (gpu-clock-speed video-mode))))
 
 (declaim (ftype (function (gpu))
                 update-gpu-stat))
@@ -957,7 +980,7 @@
   (let ((video-mode (gpu-stat-video-mode (gpu-gpu-stat gpu)))
         (gpu-cycles (wrap-word (truncate (gpu-partial-cycles gpu)))))
     (setf (gpu-current-scanline-cycles gpu)
-          (wrap-word (+ gpu-cycles (gpu-current-scanline-cycles gpu))))
+          (+ gpu-cycles (gpu-current-scanline-cycles gpu)))
     (decf (gpu-partial-cycles gpu)
           gpu-cycles)
     (when (>= (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode))
@@ -967,7 +990,48 @@
             (mod (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode)))))
   (values))
 
-(declaim (ftype (function (gpu (unsigned-byte 16)))
+(declaim (ftype (function (gpu (unsigned-byte 64)))
+                sync))
+(defun sync (gpu clock)
+  (tick-gpu gpu (- clock (gpu-system-clock gpu)))
+  ; Sync with the rest of the system
+  (setf (gpu-system-clock gpu)
+        clock)
+  (values))
+
+(declaim (ftype (function (gpu)
+                          (unsigned-byte 16))
+                number-of-lines-in-vblank))
+(defun number-of-lines-in-vblank (gpu)
+  (+ (gpu-display-start-y gpu)
+     (-
+      (1- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu))))
+      (gpu-display-end-y gpu))))
+
+(declaim (ftype (function (gpu))
+                vsync))
+(defun vsync (gpu)
+  ; We only want to do things like triggering the VBLANK interrupt and
+  ; drawing the framebuffer on the rising edge.
+  (setf (gpu-frame-counter gpu)
+        (wrap-word (1+ (gpu-frame-counter gpu))))
+  (funcall (gpu-exception-callback gpu))
+  (funcall (gpu-render-callback gpu))
+  ; Once we're done rendering, the render list needs to be cleared or we
+  ; will just keep accumulating old frame data.
+  (setf (gpu-render-list gpu) (list))
+  (setf (gpu-render-list-length gpu) 0)
+
+  (funcall (gpu-sync-callback gpu)
+           (lambda (clock) (sync gpu clock))
+           (truncate (gpu-clocks-to-cpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
+                                               (* (lines-per-frame (gpu-stat-video-mode
+                                                                    (gpu-gpu-stat gpu)))
+                                                  (clocks-per-scanline (gpu-stat-video-mode
+                                                                        (gpu-gpu-stat gpu)))))))
+  (values))
+
+(declaim (ftype (function (gpu (unsigned-byte 64)))
                 tick-gpu))
 (defun tick-gpu (gpu cpu-clocks)
   "Updates the GPUs state by stepping it through time equal to a number of
@@ -976,23 +1040,22 @@
        (incf (gpu-partial-cycles gpu)
              (cpu-clocks-to-gpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
                                        cpu-clocks)))
-  (let ((previous-scanline (gpu-current-scanline gpu)))
+
+  (let ((previous-scanline (gpu-current-scanline gpu))
+        (elapsed-lines (truncate (gpu-partial-cycles gpu)
+                                 (clocks-per-scanline (gpu-stat-video-mode
+                                                       (gpu-gpu-stat gpu))))))
+
+
 
     (update-scanline gpu)
 
     (update-gpu-stat gpu)
 
-    (when (and (not (line-in-vblank? gpu previous-scanline))
-               (line-in-vblank? gpu (gpu-current-scanline gpu)))
-      ; We only want to do things like triggering the VBLANK interrupt and
-      ; drawing the framebuffer on the rising edge.
-      (setf (gpu-frame-counter gpu)
-            (wrap-word (1+ (gpu-frame-counter gpu))))
-      (funcall (gpu-exception-callback gpu))
-      (funcall (gpu-render-callback gpu))
-      ; Once we're done rendering, the render list needs to be cleared or we
-      ; will just kkeep accumulating old frame data.
-      (setf (gpu-render-list gpu) (list))
-      (setf (gpu-render-list-length gpu) 0)))
+    (when (and (line-in-vblank? gpu (gpu-current-scanline gpu))
+               (or (not (line-in-vblank? gpu previous-scanline))
+                   (<= (number-of-lines-in-vblank gpu)
+                       elapsed-lines)))
+      (vsync gpu)))
 
   (values))

@@ -78,6 +78,7 @@
       ((in-range +dma-registers-begin+ +dma-registers-size+ address)
        (psx-dma:get-register (psx-dma psx) (mod address +dma-registers-begin+)))
       ((in-range +gpu-registers-begin+ +gpu-registers-size+ address)
+       (psx-gpu:sync (psx-gpu psx) (psx-clock psx))
        (psx-gpu:read-gpu (psx-gpu psx) (mod address +gpu-registers-begin+)))
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%"
@@ -200,6 +201,7 @@
         value)
        value)
       ((in-range +gpu-registers-begin+ +gpu-registers-size+ address)
+       (psx-gpu:sync (psx-gpu psx) (psx-clock psx))
        (psx-gpu::write-gpu (psx-gpu psx)
                            (mod address +gpu-registers-begin+)
                            value))
@@ -237,6 +239,9 @@
    (lambda ()
            (psx-irq::raise-interrupt (psx-irq psx) :cdrom)
            0))
+  (setf
+   (psx-gpu:gpu-sync-callback (psx-gpu psx))
+   (lambda (event clock) (register-sync-event psx event clock)))
   (setf
    (psx-gpu:gpu-exception-callback (psx-gpu psx))
    (lambda ()
