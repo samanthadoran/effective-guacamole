@@ -241,7 +241,7 @@
            0))
   (setf
    (psx-gpu:gpu-sync-callback (psx-gpu psx))
-   (lambda (event clock) (register-sync-event psx event clock)))
+   (lambda (clock) (register-sync-event psx clock)))
   (setf
    (psx-gpu:gpu-exception-callback (psx-gpu psx))
    (lambda ()

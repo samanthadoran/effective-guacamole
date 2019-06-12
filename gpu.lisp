@@ -115,7 +115,7 @@
 
 (defstruct gpu
   "A model psx gpu"
-  (system-clock 0 :type (unsigned-byte 64))
+  (system-clock 0 :type (unsigned-byte 63))
   (gpu-stat (make-gpu-stat) :type gpu-stat)
   ; Not sure how to group the following variables. Maybe some sort of
   ; render-settings struct?
@@ -138,7 +138,7 @@
   (display-start-y 0 :type (unsigned-byte 10))
   (display-end-y 0 :type (unsigned-byte 10))
   (current-scanline 0 :type (unsigned-byte 16))
-  (current-scanline-cycles 0 :type (unsigned-byte 64))
+  (current-scanline-cycles 0 :type (unsigned-byte 63))
   (frame-counter 0 :type (unsigned-byte 32))
   (partial-cycles 0f0 :type single-float)
   (vram
@@ -152,14 +152,47 @@
   (render-list-length 0 :type (unsigned-byte 32))
   (gp0-op (make-gp0-operation) :type gp0-operation)
   (sync-callback
-   (lambda (func clock) (declare (ignore func clock)))
-   :type (function ((function ((unsigned-byte 64))) (unsigned-byte 64))))
+   (lambda (clock) (declare (ignore clock)))
+   :type (function ((unsigned-byte 63))))
   (exception-callback
    (lambda () 0)
    :type (function () (unsigned-byte 8)))
   (render-callback
    (lambda () (values))
    :type (function ())))
+
+(declaim (ftype (function (keyword)
+                          (or
+                           (single-float 53.69 53.69)
+                           (single-float 53.2224 53.2224)))
+                gpu-clock-speed)
+         (inline gpu-clock-speed))
+(defun gpu-clock-speed (video-mode)
+  "Determines the gpu clock speed in MHz based upon the video mode."
+  (ecase video-mode
+         (:ntsc 53.69)
+         (:pal 53.2224)))
+
+(declaim (ftype (function (keyword (unsigned-byte 63))
+                          single-float)
+                gpu-clocks-to-cpu-clocks)
+         (inline gpu-clocks-to-cpu-clocks))
+(defun gpu-clocks-to-cpu-clocks (video-mode gpu-clocks)
+  "Converts gpu clocks into cpu clocks depending on the video mode."
+  (* gpu-clocks (/ 33.868 (gpu-clock-speed video-mode))))
+
+(declaim (ftype (function (keyword)
+                          (or
+                           (integer 3406 3406)
+                           (integer 3413 3413)))
+                clocks-per-scanline)
+         (inline clocks-per-scanline))
+(defun clocks-per-scanline (video-mode)
+  "Determines the number of gpu clocks that will pass in one single scanline
+   depending on the video mode being used."
+  (ecase video-mode
+         (:ntsc 3413)
+         (:pal 3406)))
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -802,7 +835,6 @@
   (setf (gpu-display-end-y gpu) (ldb (byte 10 10) value))
   (funcall
    (gpu-sync-callback gpu)
-   (lambda (clock) (sync gpu clock))
    (truncate (gpu-clocks-to-cpu-clocks
               (gpu-stat-video-mode (gpu-gpu-stat gpu))
               (* (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu)))
@@ -870,23 +902,11 @@
                 power-on))
 (defun power-on (gpu)
   "Do some housekeeping for the power on of the gpu."
+  (declare (ignore gpu))
   ; TODO(Samantha): Remove this?
   ; TODO(Samantha): I had wanted to set the first sync here, but display-end-y
   ; isn't set for awhile. Oops?
   )
-
-(declaim (ftype (function (keyword)
-                          (or
-                           (integer 3406 3406)
-                           (integer 3413 3413)))
-                clocks-per-scanline)
-         (inline clocks-per-scanline))
-(defun clocks-per-scanline (video-mode)
-  "Determines the number of gpu clocks that will pass in one single scanline
-   depending on the video mode being used."
-  (ecase video-mode
-         (:ntsc 3413)
-         (:pal 3406)))
 
 (declaim (ftype (function (keyword)
                           (or
@@ -901,18 +921,6 @@
          (:ntsc 263)
          (:pal 314)))
 
-(declaim (ftype (function (keyword)
-                          (or
-                           (single-float 53.69 53.69)
-                           (single-float 53.2224 53.2224)))
-                gpu-clock-speed)
-         (inline gpu-clock-speed))
-(defun gpu-clock-speed (video-mode)
-  "Determines the gpu clock speed in MHz based upon the video mode."
-  (ecase video-mode
-         (:ntsc 53.69)
-         (:pal 53.2224)))
-
 (declaim (ftype (function (gpu (unsigned-byte 16))
                           boolean)
                 line-in-vblank?)
@@ -925,21 +933,13 @@
        scanline
        (gpu-display-end-y gpu))))
 
-(declaim (ftype (function (keyword (unsigned-byte 64))
+(declaim (ftype (function (keyword (unsigned-byte 63))
                           single-float)
                 cpu-clocks-to-gpu-clocks)
          (inline cpu-clocks-to-gpu-clocks))
 (defun cpu-clocks-to-gpu-clocks (video-mode cpu-clocks)
   "Converts cpu clocks into gpu clocks depending on the video mode."
   (* (/ (gpu-clock-speed video-mode) 33.868) cpu-clocks))
-
-(declaim (ftype (function (keyword (unsigned-byte 64))
-                          single-float)
-                gpu-clocks-to-cpu-clocks)
-         (inline gpu-clocks-to-cpu-clocks))
-(defun gpu-clocks-to-cpu-clocks (video-mode gpu-clocks)
-  "Converts gpu clocks into cpu clocks depending on the video mode."
-  (* gpu-clocks (/ 33.868 (gpu-clock-speed video-mode))))
 
 (declaim (ftype (function (gpu))
                 update-gpu-stat))
@@ -980,7 +980,7 @@
   (let ((video-mode (gpu-stat-video-mode (gpu-gpu-stat gpu)))
         (gpu-cycles (wrap-word (truncate (gpu-partial-cycles gpu)))))
     (setf (gpu-current-scanline-cycles gpu)
-          (+ gpu-cycles (gpu-current-scanline-cycles gpu)))
+          (ldb (byte 63 0) (+ gpu-cycles (gpu-current-scanline-cycles gpu))))
     (decf (gpu-partial-cycles gpu)
           gpu-cycles)
     (when (>= (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode))
@@ -990,10 +990,10 @@
             (mod (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode)))))
   (values))
 
-(declaim (ftype (function (gpu (unsigned-byte 64)))
+(declaim (ftype (function (gpu (unsigned-byte 63)))
                 sync))
 (defun sync (gpu clock)
-  (tick-gpu gpu (- clock (gpu-system-clock gpu)))
+  (tick-gpu gpu (the (unsigned-byte 63) (- clock (gpu-system-clock gpu))))
   ; Sync with the rest of the system
   (setf (gpu-system-clock gpu)
         clock)
@@ -1023,7 +1023,6 @@
   (setf (gpu-render-list-length gpu) 0)
 
   (funcall (gpu-sync-callback gpu)
-           (lambda (clock) (sync gpu clock))
            (truncate (gpu-clocks-to-cpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
                                                (* (lines-per-frame (gpu-stat-video-mode
                                                                     (gpu-gpu-stat gpu)))
@@ -1031,7 +1030,7 @@
                                                                         (gpu-gpu-stat gpu)))))))
   (values))
 
-(declaim (ftype (function (gpu (unsigned-byte 64)))
+(declaim (ftype (function (gpu (unsigned-byte 63)))
                 tick-gpu))
 (defun tick-gpu (gpu cpu-clocks)
   "Updates the GPUs state by stepping it through time equal to a number of
@@ -1055,7 +1054,7 @@
     (when (and (line-in-vblank? gpu (gpu-current-scanline gpu))
                (or (not (line-in-vblank? gpu previous-scanline))
                    (<= (number-of-lines-in-vblank gpu)
-                       elapsed-lines)))
+                       (the (unsigned-byte 63) elapsed-lines))))
       (vsync gpu)))
 
   (values))
