@@ -17,6 +17,7 @@
                #:log4cl)
   :serial t
   :components (
+               (:file "scheduler")
                (:file "memory-constants")
                (:file "memory-card" :depends-on ("memory-constants"))
                (:file "cop0")
@@ -31,7 +32,7 @@
                (:file "joypads" :depends-on ("memory-card"))
                (:file "spu" :depends-on ("memory-constants"))
                (:file "dma" :depends-on ("memory-constants"))
-               (:file "console" :depends-on ("cpu" "cache-control" "memory-constants" "gpu" "dma" "cdrom" "irq" "timers" "joypads" "renderer" "input"))
+               (:file "console" :depends-on ("cpu" "cache-control" "memory-constants" "gpu" "dma" "cdrom" "irq" "timers" "joypads" "renderer" "input" "scheduler"))
                (:file "mmu" :depends-on ("console"))
                (:file "instructions/instruction-macros" :depends-on ("cpu"))
                (:file "instructions/arithmeticops" :depends-on ("cpu"))
@@ -44,5 +45,6 @@
 (defsystem #:psx/tests
   :depends-on (#:psx #:rove)
   :components ((:file "tests/cdrom")
-               (:file "tests/memory-constants"))
+               (:file "tests/memory-constants")
+               (:file "tests/scheduler"))
   :perform (test-op (o c) (symbol-call :rove '#:run c)))

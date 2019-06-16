@@ -9,8 +9,7 @@
 
 (defstruct psx
   "A model psx"
-  (clock 0 :type (unsigned-byte 63))
-  (epoch-of-next-gpu-sync 0 :type (unsigned-byte 63))
+  (scheduler (psx-scheduler:make-scheduler) :type psx-scheduler:scheduler)
   (cpu (make-cpu) :type cpu)
   (irq (psx-irq:make-irq) :type psx-irq:irq)
   (timers (psx-timers:make-timers) :type psx-timers:timers)
@@ -46,6 +45,9 @@
   (map-memory psx)
   (psx-cpu:power-on (psx-cpu psx))
   (psx-gpu:power-on (psx-gpu psx))
+  (setf (psx-scheduler:component-sync-callback
+         (aref (psx-scheduler:scheduler-components (psx-scheduler psx)) 0))
+        (lambda (epoch) (psx-gpu:sync (psx-gpu psx) epoch)))
   (values))
 
 ; TODO(Samantha): Rename this to something more descriptive
@@ -55,29 +57,17 @@
     (console-on my-psx bios-rom-path)
     my-psx))
 
-
-(declaim (ftype (function (psx
-                           (unsigned-byte 63)))
-                register-sync-event))
-(defun register-sync-event (psx clock)
-  (setf (psx-epoch-of-next-gpu-sync psx)
-        clock)
-  (values))
-
 (declaim (ftype (function (pathname) (unsigned-byte 32)) setup-and-run))
 (defun setup-and-run (bios-rom-path)
   (psx-renderer:initialize)
   (psx-input:init-pads)
   (let ((psx (make-console bios-rom-path)))
-    (loop for cpu-clocks = (step-cpu (psx-cpu psx)) for previous-clock = (psx-clock psx)
-      do (incf (psx-clock psx) cpu-clocks)
-
-      (when (<= previous-clock (psx-epoch-of-next-gpu-sync psx) (psx-clock psx))
-        (psx-gpu:sync (psx-gpu psx) (psx-clock psx)))
+    (loop for cpu-clocks = (step-cpu (psx-cpu psx))
 
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
       ; TODO(Samantha): Timers is dog slow, optimize it.
       ; do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)
+      do (psx-scheduler:sync-components (psx-scheduler psx) cpu-clocks)
       do (psx-joypads:tick-joypads (psx-joypads psx) cpu-clocks)))
   0)
