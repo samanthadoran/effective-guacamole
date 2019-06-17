@@ -6,7 +6,7 @@
 
 (in-package :psx-scheduler-tests)
 
-(deftest sync-components
+(deftest sync-components-test
   (let* ((scheduler (make-scheduler))
          (test-component (aref (scheduler-components scheduler) 0))
          (sync-flag nil))
