@@ -194,6 +194,48 @@
          (:ntsc 3413)
          (:pal 3406)))
 
+(declaim (ftype (function (keyword)
+                          (or
+                           (integer 263 263)
+                           (integer 314 314)))
+                lines-per-frame)
+         (inline lines-per-frame))
+(defun lines-per-frame (video-mode)
+  "Determines the number of scanlines that will occur in one full frame
+            (including VBLANKS) depending on the video mode being used."
+  (ecase video-mode
+         (:ntsc 263)
+         (:pal 314)))
+
+(declaim (ftype (function (gpu (unsigned-byte 16))
+                          boolean)
+                line-in-vblank?)
+         (inline line-in-vblank?))
+(defun line-in-vblank? (gpu scanline)
+  "Determines whether or not the gpu is currently in the vertical
+            blanking period."
+  (not
+   (<= (gpu-display-start-y gpu)
+       scanline
+       (gpu-display-end-y gpu))))
+
+(declaim (ftype (function (gpu)
+                         (unsigned-byte 63))
+                gpu-cycles-until-next-vsync))
+(defun gpu-cycles-until-next-vsync (gpu)
+
+  ; TODO(Samantha): This gets weird when called on init, the gpu hasn't set
+  ; display-end-y, yet. Is there a default here?
+  (* (clocks-per-scanline (gpu-stat-video-mode
+                           (gpu-gpu-stat gpu)))
+     (if (< (gpu-current-scanline gpu)(gpu-display-end-y gpu))
+       (- (gpu-display-end-y gpu)
+          (gpu-current-scanline gpu))
+       (+
+        (- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu)))
+           (gpu-current-scanline gpu))
+        (gpu-display-end-y gpu)))))
+
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
   (declare (ignore gpu))
@@ -837,9 +879,7 @@
    (gpu-sync-callback gpu)
    (truncate (gpu-clocks-to-cpu-clocks
               (gpu-stat-video-mode (gpu-gpu-stat gpu))
-              (* (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu)))
-                 (abs (- (1+ (gpu-display-end-y gpu))
-                         (gpu-current-scanline gpu)))))))
+              (gpu-cycles-until-next-vsync gpu))))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -907,31 +947,6 @@
   ; TODO(Samantha): I had wanted to set the first sync here, but display-end-y
   ; isn't set for awhile. Oops?
   )
-
-(declaim (ftype (function (keyword)
-                          (or
-                           (integer 263 263)
-                           (integer 314 314)))
-                lines-per-frame)
-         (inline lines-per-frame))
-(defun lines-per-frame (video-mode)
-  "Determines the number of scanlines that will occur in one full frame
-   (including VBLANKS) depending on the video mode being used."
-  (ecase video-mode
-         (:ntsc 263)
-         (:pal 314)))
-
-(declaim (ftype (function (gpu (unsigned-byte 16))
-                          boolean)
-                line-in-vblank?)
-         (inline line-in-vblank?))
-(defun line-in-vblank? (gpu scanline)
-  "Determines whether or not the gpu is currently in the vertical
-   blanking period."
-  (not
-   (<= (gpu-display-start-y gpu)
-       scanline
-       (gpu-display-end-y gpu))))
 
 (declaim (ftype (function (keyword (unsigned-byte 63))
                           single-float)
@@ -1024,10 +1039,7 @@
 
   (funcall (gpu-sync-callback gpu)
            (truncate (gpu-clocks-to-cpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
-                                               (* (lines-per-frame (gpu-stat-video-mode
-                                                                    (gpu-gpu-stat gpu)))
-                                                  (clocks-per-scanline (gpu-stat-video-mode
-                                                                        (gpu-gpu-stat gpu)))))))
+                                               (gpu-cycles-until-next-vsync gpu))))
   (values))
 
 (declaim (ftype (function (gpu (unsigned-byte 63)))
