@@ -220,21 +220,34 @@
        (gpu-display-end-y gpu))))
 
 (declaim (ftype (function (gpu)
+                          (unsigned-byte 16))
+                number-of-lines-in-vblank))
+(defun number-of-lines-in-vblank (gpu)
+  (+ (gpu-display-start-y gpu)
+     (-
+      (1- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu))))
+      (gpu-display-end-y gpu))))
+
+(declaim (ftype (function (gpu)
                          (unsigned-byte 63))
                 gpu-cycles-until-next-vsync))
 (defun gpu-cycles-until-next-vsync (gpu)
 
   ; TODO(Samantha): This gets weird when called on init, the gpu hasn't set
   ; display-end-y, yet. Is there a default here?
-  (* (clocks-per-scanline (gpu-stat-video-mode
-                           (gpu-gpu-stat gpu)))
-     (if (< (gpu-current-scanline gpu)(gpu-display-end-y gpu))
-       (- (gpu-display-end-y gpu)
-          (gpu-current-scanline gpu))
-       (+
-        (- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu)))
-           (gpu-current-scanline gpu))
-        (gpu-display-end-y gpu)))))
+  (+ (* (clocks-per-scanline (gpu-stat-video-mode
+                              (gpu-gpu-stat gpu)))
+        (1- (if (zerop (- (gpu-display-end-y gpu) (gpu-display-start-y gpu)))
+              (1- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu))))
+              (if (< (gpu-current-scanline gpu)( gpu-display-end-y gpu))
+                (- (gpu-display-end-y gpu)
+                   (gpu-current-scanline gpu))
+                (+
+                 (- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu)))
+                    (gpu-current-scanline gpu))
+                 (gpu-display-end-y gpu))))))
+     (- (1- (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu))))
+        (gpu-current-scanline-cycles gpu))))
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -1000,7 +1013,10 @@
           gpu-cycles)
     (when (>= (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode))
       (setf (gpu-current-scanline gpu)
-            (ldb (byte 16 0) (mod (1+ (gpu-current-scanline gpu)) (lines-per-frame video-mode))))
+            (ldb (byte 16 0) (mod (+ (truncate (gpu-current-scanline-cycles gpu)
+                                               (clocks-per-scanline video-mode))
+                                     (gpu-current-scanline gpu))
+                                  (lines-per-frame video-mode))))
       (setf (gpu-current-scanline-cycles gpu)
             (mod (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode)))))
   (values))
@@ -1012,16 +1028,10 @@
   ; Sync with the rest of the system
   (setf (gpu-system-clock gpu)
         clock)
+  (funcall (gpu-sync-callback gpu)
+           (truncate (gpu-clocks-to-cpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
+                                               (gpu-cycles-until-next-vsync gpu))))
   (values))
-
-(declaim (ftype (function (gpu)
-                          (unsigned-byte 16))
-                number-of-lines-in-vblank))
-(defun number-of-lines-in-vblank (gpu)
-  (+ (gpu-display-start-y gpu)
-     (-
-      (1- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu))))
-      (gpu-display-end-y gpu))))
 
 (declaim (ftype (function (gpu))
                 vsync))
@@ -1037,9 +1047,6 @@
   (setf (gpu-render-list gpu) (list))
   (setf (gpu-render-list-length gpu) 0)
 
-  (funcall (gpu-sync-callback gpu)
-           (truncate (gpu-clocks-to-cpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
-                                               (gpu-cycles-until-next-vsync gpu))))
   (values))
 
 (declaim (ftype (function (gpu (unsigned-byte 63)))
@@ -1065,7 +1072,7 @@
 
     (when (and (line-in-vblank? gpu (gpu-current-scanline gpu))
                (or (not (line-in-vblank? gpu previous-scanline))
-                   (<= (number-of-lines-in-vblank gpu)
+                   (< (number-of-lines-in-vblank gpu)
                        (the (unsigned-byte 63) elapsed-lines))))
       (vsync gpu)))
 
