@@ -50,18 +50,18 @@
     (power-on gpu)
     (testing "Next line."
       (setf (psx-gpu::gpu-current-scanline gpu)
-            255)
+            256)
       (ok (= (psx-gpu::gpu-cycles-until-next-vsync gpu)
              (psx-gpu::clocks-per-scanline video-mode))))
     (testing "Last line in frame."
       (setf (psx-gpu::gpu-current-scanline gpu)
             (1- (psx-gpu::lines-per-frame video-mode)))
       (ok (= (psx-gpu::gpu-cycles-until-next-vsync gpu)
-             (* (1+ 256)
+             (* (1+ 257)
                 (psx-gpu::clocks-per-scanline video-mode)))))
     (testing "Next cycle"
       (setf (psx-gpu::gpu-current-scanline gpu)
-            255)
+            256)
       (setf (psx-gpu::gpu-current-scanline-cycles gpu)
             (1- (psx-gpu::clocks-per-scanline video-mode)))
       (ok (= (psx-gpu::gpu-cycles-until-next-vsync gpu) 1)))))

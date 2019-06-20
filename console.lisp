@@ -67,7 +67,7 @@
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
       ; TODO(Samantha): Timers is dog slow, optimize it.
-      ; do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)
+      do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)
       do (psx-scheduler:sync-components (psx-scheduler psx) cpu-clocks)
       do (psx-joypads:tick-joypads (psx-joypads psx) cpu-clocks)))
   0)

@@ -245,13 +245,13 @@
   ; display-end-y, yet. Is there a default here?
   (+ (* (clocks-per-scanline (gpu-stat-video-mode
                               (gpu-gpu-stat gpu)))
-        (1- (if (< (gpu-current-scanline gpu) (gpu-display-end-y gpu))
-              (- (gpu-display-end-y gpu)
+        (1- (if (<= (gpu-current-scanline gpu) (gpu-display-end-y gpu))
+              (- (1+ (gpu-display-end-y gpu))
                  (gpu-current-scanline gpu))
               (+
                (- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu)))
                   (gpu-current-scanline gpu))
-               (gpu-display-end-y gpu)))))
+               (1+ (gpu-display-end-y gpu))))))
      (- (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu)))
         (gpu-current-scanline-cycles gpu))))
 
