@@ -57,7 +57,7 @@
       (setf (psx-gpu::gpu-current-scanline gpu)
             (1- (psx-gpu::lines-per-frame video-mode)))
       (ok (= (psx-gpu::gpu-cycles-until-next-vsync gpu)
-             (* (1+ (psx-gpu::lines-per-frame video-mode))
+             (* (1+ 256)
                 (psx-gpu::clocks-per-scanline video-mode)))))
     (testing "Next cycle"
       (setf (psx-gpu::gpu-current-scanline gpu)
