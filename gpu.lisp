@@ -986,11 +986,15 @@
           cycles)
 
     (when (>= (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode))
+
+      (incf (gpu-current-scanline gpu)
+            (truncate (gpu-current-scanline-cycles gpu)
+                      (clocks-per-scanline video-mode)))
+
       (setf (gpu-current-scanline gpu)
-            (mod (+ (truncate (gpu-current-scanline-cycles gpu)
-                              (clocks-per-scanline video-mode))
-                    (gpu-current-scanline gpu))
+            (mod (gpu-current-scanline gpu)
                  (lines-per-frame video-mode)))
+
       (setf (gpu-current-scanline-cycles gpu)
             (mod (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode)))))
   (values))
@@ -1003,8 +1007,11 @@
   (setf (gpu-system-clock gpu)
         clock)
   (funcall (gpu-sync-callback gpu)
-           (truncate (gpu-clocks-to-cpu-clocks (gpu-stat-video-mode (gpu-gpu-stat gpu))
-                                               (gpu-cycles-until-next-vsync gpu))))
+           (+
+            (truncate (gpu-clocks-to-cpu-clocks
+                       (gpu-stat-video-mode (gpu-gpu-stat gpu))
+                       (gpu-cycles-until-next-vsync gpu)))
+            (gpu-system-clock gpu)))
   (values))
 
 (declaim (ftype (function (gpu))
@@ -1012,8 +1019,7 @@
 (defun vsync (gpu)
   ; We only want to do things like triggering the VBLANK interrupt and
   ; drawing the framebuffer on the rising edge.
-  (setf (gpu-frame-counter gpu)
-        (wrap-word (1+ (gpu-frame-counter gpu))))
+  (incf (gpu-frame-counter gpu))
   (funcall (gpu-exception-callback gpu))
   (funcall (gpu-render-callback gpu))
   ; Once we're done rendering, the render list needs to be cleared or we
