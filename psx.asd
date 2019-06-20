@@ -46,5 +46,6 @@
   :depends-on (#:psx #:rove)
   :components ((:file "tests/cdrom")
                (:file "tests/memory-constants")
+               (:file "tests/gpu")
                (:file "tests/scheduler"))
   :perform (test-op (o c) (symbol-call :rove '#:run c)))

@@ -175,6 +175,14 @@
 
 (declaim (ftype (function (keyword (unsigned-byte 63))
                           single-float)
+                cpu-clocks-to-gpu-clocks)
+         (inline cpu-clocks-to-gpu-clocks))
+(defun cpu-clocks-to-gpu-clocks (video-mode cpu-clocks)
+  "Converts cpu clocks into gpu clocks depending on the video mode."
+  (* (/ (gpu-clock-speed video-mode) 33.868) cpu-clocks))
+
+(declaim (ftype (function (keyword (unsigned-byte 63))
+                          single-float)
                 gpu-clocks-to-cpu-clocks)
          (inline gpu-clocks-to-cpu-clocks))
 (defun gpu-clocks-to-cpu-clocks (video-mode gpu-clocks)
@@ -237,16 +245,14 @@
   ; display-end-y, yet. Is there a default here?
   (+ (* (clocks-per-scanline (gpu-stat-video-mode
                               (gpu-gpu-stat gpu)))
-        (1- (if (zerop (- (gpu-display-end-y gpu) (gpu-display-start-y gpu)))
-              (1- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu))))
-              (if (< (gpu-current-scanline gpu)( gpu-display-end-y gpu))
-                (- (gpu-display-end-y gpu)
-                   (gpu-current-scanline gpu))
-                (+
-                 (- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu)))
-                    (gpu-current-scanline gpu))
-                 (gpu-display-end-y gpu))))))
-     (- (1- (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu))))
+        (1- (if (< (gpu-current-scanline gpu) (gpu-display-end-y gpu))
+              (- (gpu-display-end-y gpu)
+                 (gpu-current-scanline gpu))
+              (+
+               (- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu)))
+                  (gpu-current-scanline gpu))
+               (gpu-display-end-y gpu)))))
+     (- (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu)))
         (gpu-current-scanline-cycles gpu))))
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
@@ -955,19 +961,8 @@
                 power-on))
 (defun power-on (gpu)
   "Do some housekeeping for the power on of the gpu."
-  (declare (ignore gpu))
-  ; TODO(Samantha): Remove this?
-  ; TODO(Samantha): I had wanted to set the first sync here, but display-end-y
-  ; isn't set for awhile. Oops?
-  )
-
-(declaim (ftype (function (keyword (unsigned-byte 63))
-                          single-float)
-                cpu-clocks-to-gpu-clocks)
-         (inline cpu-clocks-to-gpu-clocks))
-(defun cpu-clocks-to-gpu-clocks (video-mode cpu-clocks)
-  "Converts cpu clocks into gpu clocks depending on the video mode."
-  (* (/ (gpu-clock-speed video-mode) 33.868) cpu-clocks))
+  (gpu-soft-reset gpu)
+  (sync gpu 0))
 
 (declaim (ftype (function (gpu))
                 update-gpu-stat))
@@ -1002,21 +997,19 @@
             nil)))
   (values))
 
-(declaim (ftype (function (gpu))
+(declaim (ftype (function (gpu (unsigned-byte 63)))
                 update-scanline))
-(defun update-scanline (gpu)
-  (let ((video-mode (gpu-stat-video-mode (gpu-gpu-stat gpu)))
-        (gpu-cycles (wrap-word (truncate (gpu-partial-cycles gpu)))))
-    (setf (gpu-current-scanline-cycles gpu)
-          (ldb (byte 63 0) (+ gpu-cycles (gpu-current-scanline-cycles gpu))))
-    (decf (gpu-partial-cycles gpu)
-          gpu-cycles)
+(defun update-scanline (gpu cycles)
+  (let ((video-mode (gpu-stat-video-mode (gpu-gpu-stat gpu))))
+    (incf (gpu-current-scanline-cycles gpu)
+          cycles)
+
     (when (>= (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode))
       (setf (gpu-current-scanline gpu)
-            (ldb (byte 16 0) (mod (+ (truncate (gpu-current-scanline-cycles gpu)
-                                               (clocks-per-scanline video-mode))
-                                     (gpu-current-scanline gpu))
-                                  (lines-per-frame video-mode))))
+            (mod (+ (truncate (gpu-current-scanline-cycles gpu)
+                              (clocks-per-scanline video-mode))
+                    (gpu-current-scanline gpu))
+                 (lines-per-frame video-mode)))
       (setf (gpu-current-scanline-cycles gpu)
             (mod (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode)))))
   (values))
@@ -1062,11 +1055,14 @@
   (let ((previous-scanline (gpu-current-scanline gpu))
         (elapsed-lines (truncate (gpu-partial-cycles gpu)
                                  (clocks-per-scanline (gpu-stat-video-mode
-                                                       (gpu-gpu-stat gpu))))))
+                                                       (gpu-gpu-stat gpu)))))
+        (gpu-cycles (truncate (gpu-partial-cycles gpu))))
 
 
 
-    (update-scanline gpu)
+    (update-scanline gpu gpu-cycles)
+    (decf (gpu-partial-cycles gpu)
+          gpu-cycles)
 
     (update-gpu-stat gpu)
 
