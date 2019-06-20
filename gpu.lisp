@@ -877,7 +877,7 @@
   (setf (gpu-display-end-y gpu) (ldb (byte 10 10) value))
   (funcall
    (gpu-sync-callback gpu)
-   (truncate (gpu-clocks-to-cpu-clocks
+   (ceiling (gpu-clocks-to-cpu-clocks
               (gpu-stat-video-mode (gpu-gpu-stat gpu))
               (gpu-cycles-until-next-vsync gpu))))
   0)
@@ -1008,7 +1008,7 @@
         clock)
   (funcall (gpu-sync-callback gpu)
            (+
-            (truncate (gpu-clocks-to-cpu-clocks
+            (ceiling (gpu-clocks-to-cpu-clocks
                        (gpu-stat-video-mode (gpu-gpu-stat gpu))
                        (gpu-cycles-until-next-vsync gpu)))
             (gpu-system-clock gpu)))
