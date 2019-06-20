@@ -379,25 +379,7 @@
       (gp0-operation-required-number-of-arguments
        (gpu-gp0-op gpu))
       0)))
-  ; (setf
-  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
-  ;  (ldb (byte 8 0) value))
-  ; (incf *xpos*)
-  ; (setf
-  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
-  ;  (ldb (byte 8 8) value))
-  ; (incf *xpos*)
-  ; (setf
-  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
-  ;  (ldb (byte 8 16) value))
-  ; (incf *xpos*)
-  ; (setf
-  ;  (aref (gpu-vram gpu) *ypos* *xpos*)
-  ;  (ldb (byte 8 24) value))
-  ; (when (or (>= *xpos* (+ *xsize* *xbase*)) (>= *xpos* 2048))
-  ;   (setf *xpos* *xbase*)
-  ;   (incf *ypos*))
-  ; (format t "Fine, (x: ~D, y: ~D)~%" *xpos* *ypos*)
+
   (setf
    (aref (gpu-vram gpu) *ypos* *xpos*)
    (ldb (byte 16 0) value))
@@ -428,7 +410,6 @@
   ; Create a fake GP0-operation that will load the pixels into vram one by one.
   ; This bypasses needing to inspect GP0(#xA0) to determine the number of
   ; arguments we would need.
-  ; (format t "Start.~%")
   (setf *xsize* (* 1 (ldb (byte 16 0) size)))
   (setf *xbase* (* 1 (ldb (byte 16 0) coordinates)))
   (setf *xpos* *xbase*)
