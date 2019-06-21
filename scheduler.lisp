@@ -25,7 +25,7 @@
    itself."
   (master-clock 0 :type (unsigned-byte 63))
   (components
-   (make-array 2
+   (make-array '(2)
                :element-type 'component
                :initial-contents (vector (make-component)
                                          (make-component)))

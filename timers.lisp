@@ -264,8 +264,6 @@
       (when (mode-irq-at-max-value mode)
       ; TODO(Samantha): Pass the type of irq?
         (generate-irq timers timer)))
-    ; TODO(Samantha): take the min of cycles until target value and cycles until
-    ; maximum value and register a sync.
     (values)))
 
 (declaim (ftype (function (timer)
@@ -276,14 +274,14 @@
    (mode-cycles-till-value (timer-mode timer))
    (+
     (timer-source-sync-epoch timer)
-    (min (if (< (- (timer-target-value timer)
-                   (timer-current-value timer))
-                0)
-           #x1FFFF
-           (- (timer-target-value timer)
-            (timer-current-value timer)))
-         (- #xFFFF
-            (timer-current-value timer))))))
+    (abs (min (if (< (- (timer-target-value timer)
+                        (timer-current-value timer))
+                     0)
+                #xFFFF
+                (- (timer-target-value timer)
+                   (timer-current-value timer)))
+              (- #xFFFF
+                 (timer-current-value timer)))))))
 
 (declaim (ftype (function (timers))
                 init-timers))
