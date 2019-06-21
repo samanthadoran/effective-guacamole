@@ -51,7 +51,7 @@
     (incf (scheduler-master-clock scheduler)
           clocks)
     (loop for component across (scheduler-components scheduler)
-      do (when (<= previous-clock
+      do (when (<= (1+ previous-clock)
                    (component-epoch-of-next-sync component)
                    (scheduler-master-clock scheduler))
            (funcall (component-sync-callback component)
