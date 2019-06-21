@@ -2,7 +2,8 @@
   (:nicknames #:timers)
   (:use :cl)
   (:export #:timers #:make-timers #:read-timers #:write-timers
-           #:advance-timers #:timers-exception-callback))
+           #:advance-timers #:timers-exception-callback
+           #:sync-timers #:init-timers))
 
 (in-package :psx-timers)
 (declaim (optimize (speed 3) (safety 1)))
@@ -16,20 +17,21 @@
   (irq-frequency :once :type keyword)
   (irq-style :pulse :type keyword)
   ; Each different timer has a different meaning for this selection...
-  (clock-source 0 :type (unsigned-byte 2))
+  (clock-source 0 :type (integer 0 3))
+  (clock-source-callback
+   (lambda () 0)
+   :type (function () (unsigned-byte 63)))
   (reached-max-value nil :type boolean)
   (reached-target-value nil :type boolean)
   (fired-irq nil :type boolean))
 
 (defstruct timer
   (identifier :timer0 :type keyword)
-  (clock-divider 0 :type (unsigned-byte 8))
+  (source-sync-epoch 0 :type (unsigned-byte 63))
   (current-value 0 :type (unsigned-byte 16))
-  (mode (make-mode) :type mode)
   (target-value 0 :type (unsigned-byte 16))
-  ; TODO(Samantha): Make a set of rules for this. Each counter has a different
-  ; set of ways it syncs.
-  (synchronization-modes nil :type boolean))
+  (mode (make-mode) :type mode)
+  (synchronization-modes 0 :type (integer 0 3)))
 
 (declaim (ftype (function (mode)
                           (unsigned-byte 16))
@@ -59,8 +61,7 @@
    :irq-at-target-value (ldb-test (byte 1 4) word)
    :irq-at-max-value (ldb-test (byte 1 5) word)
    :irq-frequency (if (ldb-test (byte 1 6) word) :repeat :once)
-   :irq-style (if (ldb-test (byte 1 7) word) :toggle :pulse)
-   :clock-source (ldb (byte 2 8) word)))
+   :irq-style (if (ldb-test (byte 1 7) word) :toggle :pulse)))
 
 (declaim (ftype (function (mode) boolean) has-irq))
 (defun has-irq (mode)
@@ -72,7 +73,11 @@
 (defstruct timers
   ; TODO(Samantha): Figure out why this being 64 bit causes SBCL optimization
   ; notes to complain.
-  (clock 0 :type (unsigned-byte 62))
+  (clock 0 :type (unsigned-byte 63))
+  ; TODO(Samantha): Add dotclock and hblank callbacks.
+  (system-clock-callback
+   (lambda () 0)
+   :type (function () (unsigned-byte 63)))
   (exception-callback
    (lambda (keyword) (declare (ignore keyword)) 0)
    :type (function (keyword) (unsigned-byte 9)))
@@ -80,13 +85,75 @@
    (make-array 3
                :element-type 'timer
                :initial-contents (vector
-                                  (make-timer :identifier :timer0
-                                              :clock-divider 1)
-                                  (make-timer :identifier :timer1
-                                              :clock-divider 8)
-                                  (make-timer :identifier :timer2
-                                              :clock-divider 30)))
+                                  (make-timer :identifier :timer0)
+                                  (make-timer :identifier :timer1)
+                                  (make-timer :identifier :timer2)))
    :type (simple-array timer (3))))
+
+(declaim (ftype (function (timers timer (integer 0 3)))
+                set-clocksource))
+(defun set-clocksource (timers timer source)
+  (let ((mode (timer-mode timer)))
+
+    ; TODO(Samantha): Set the clock-source-callback in here somewhere.
+    (ecase (timer-identifier timer)
+           (:timer0
+            (ecase source
+                   ; System clock
+                   (0 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; Dotclock
+                   ; TODO(Samantha): Change this to the proper source
+                   (1 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; System clock
+                   (2 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; Dot clock
+                   ; TODO(Samantha): Change this to the proper source
+                   (3 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))))
+           (:timer1
+            (ecase source
+                   ; System clock
+                   (0 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; Hblank
+                   ; TODO(Samantha): Change this to the proper source
+                   (1 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; System clock
+                   (2 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; Hblank
+                   ; TODO(Samantha): Change this to the proper source
+                   (3 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))))
+           (:timer2
+            (ecase source
+                   ; System clock
+                   (0 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; System clock
+                   (1 (setf (mode-clock-source-callback mode)
+                            (timers-system-clock-callback timers)))
+                   ; System clock div 8
+                   (2 (setf (mode-clock-source-callback mode)
+                            (lambda ()
+                                    (truncate (/ (funcall
+                                                  (timers-system-clock-callback timers))
+                                                 8.0)))))
+                   ; System clock div 8
+                   (3 (setf (mode-clock-source-callback mode)
+                            (lambda ()
+                                    (truncate (/ (funcall
+                                                  (timers-system-clock-callback timers))
+                                                 8.0))))))))
+    (setf (timer-source-sync-epoch timer)
+          (funcall (mode-clock-source-callback mode)))
+    (setf (mode-clock-source mode)
+          source))
+  (values))
 
 (declaim (ftype (function (timer)
                           boolean)
@@ -105,48 +172,77 @@
   (if (eql (mode-irq-frequency (timer-mode timer)) :repeat)
     (when (has-repeat-irq timer)
       (funcall (timers-exception-callback timers) (timer-identifier timer)))
-    ; (progn
-    ;  (setf (mode-fired-irq (timer-mode timer))
-    ;        (not (mode-fired-irq (timer-mode timer))))
-    ;  (unless (mode-fired-irq (timer-mode timer))
-    ;    (when (has-repeat-irq timer)
-    ;      (funcall (timers-exception-callback timers) (timer-identifier timer)))))
+
     (when (and (has-irq (timer-mode timer))
                (not (mode-fired-irq (timer-mode timer))))
       (funcall (timers-exception-callback timers) (timer-identifier timer))
       (setf (mode-fired-irq (timer-mode timer)) t)))
   0)
 
-(declaim (ftype (function (timers timer)
-                          (unsigned-byte 8))
-                advance-timer))
-(defun advance-timer (timers timer)
-  (when (= (timer-current-value timer) #xFFFF)
-    (setf (timer-current-value timer) #x0000))
-  (when (and
-         (eql (mode-zero-counter-condition (timer-mode timer)) :at-target)
-         (= (timer-current-value timer) (timer-target-value timer)))
-    (setf (timer-current-value timer) #x0000))
-  (when (zerop (mod (timers-clock timers) (timer-clock-divider timer)))
-    (incf (timer-current-value timer)))
-  (unless (mode-reached-max-value (timer-mode timer))
-    (setf (mode-reached-max-value (timer-mode timer))
-          (= (timer-current-value timer) #xFFFF)))
-  (unless (mode-reached-target-value (timer-mode timer))
-    (setf (mode-reached-target-value (timer-mode timer))
-          (= (timer-current-value timer) (timer-target-value timer))))
-  (generate-irq timers timer)
-  0)
+(declaim (ftype (function (timers timer))
+                sync-timer))
+(defun sync-timer (timers timer)
+  (let ((cycles-since-sync (- (funcall (mode-clock-source-callback
+                                        (timer-mode timer)))
+                              (timer-source-sync-epoch timer)))
+        (old-value (timer-current-value timer))
+        (mode (timer-mode timer)))
 
-(declaim (ftype (function (timers (unsigned-byte 32))) advance-timers))
-(defun advance-timers (timers cpu-clocks)
-  ; TODO(Samantha): This only takes into account the timers being tied to one
-  ; clock source. It's also the slowest thing in the system.
-  (loop for i from 1 to cpu-clocks
-    do (setf (timers-clock timers)
-             (logand #xFFFFFFFFFFFFFFFF (1+ (timers-clock timers))))
-    do (loop for timer being the elements of (timers-timers timers)
-         do (advance-timer timers timer)))
+    ; TODO(Samantha): Sync modes?
+
+    ; Move the timer's last sync forwards
+    (setf (timer-source-sync-epoch timer)
+          (funcall (mode-clock-source-callback
+                    mode)))
+
+    (setf (timer-current-value timer)
+          (ldb (byte 16 0) (+ cycles-since-sync old-value)))
+
+    (when (<= (1+ old-value)
+              #xFFFF
+              (+ old-value
+                 cycles-since-sync))
+
+      (setf (mode-reached-max-value mode)
+            t)
+
+      (when (mode-irq-at-max-value mode)
+      ; TODO(Samantha): Pass the type of irq?
+        (generate-irq timers timer)))
+
+    (when (<= (1+ old-value)
+              (timer-target-value timer)
+              (+ old-value
+                 cycles-since-sync))
+
+      (setf (mode-reached-target-value mode)
+            t)
+
+      (when (eql (mode-zero-counter-condition mode) :at-target)
+        (setf (timer-current-value timer)
+              (mod (+ (timer-current-value timer)
+                      cycles-since-sync)
+                   (timer-target-value timer))))
+
+      (when (mode-irq-at-max-value mode)
+      ; TODO(Samantha): Pass the type of irq?
+        (generate-irq timers timer)))
+    ; TODO(Samantha): take the min of cycles until target value and cycles until
+    ; maximum value and register a sync.
+    (values)))
+
+(declaim (ftype (function (timers))
+                init-timers))
+(defun init-timers (timers)
+  (loop for timer across (timers-timers timers)
+    do (set-clocksource timers timer 0))
+  (values))
+
+(declaim (ftype (function (timers))
+                sync-timers))
+(defun sync-timers (timers)
+  (loop for timer across (timers-timers timers)
+    do (sync-timer timers timer))
   (values))
 
 (declaim (ftype (function (timers (unsigned-byte 8))
@@ -178,7 +274,8 @@
       ; Writing to a timer's mode register causes the current value to
       ; be reset to 0.
       (4 (setf (timer-current-value timer) #x0000)
-         (setf (timer-mode timer) (word-to-mode value)))
+         (setf (timer-mode timer) (word-to-mode value))
+         (set-clocksource timers timer (ldb (byte 2 8) value)))
       (8 (setf (timer-target-value timer) value))
       (otherwise
        (error "Invalid timer register index: #x~1,'0x with timer ~

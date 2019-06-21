@@ -48,6 +48,9 @@
   (setf (psx-scheduler:component-sync-callback
          (aref (psx-scheduler:scheduler-components (psx-scheduler psx)) 0))
         (lambda (epoch) (psx-gpu:sync (psx-gpu psx) epoch)))
+  (setf (psx-timers::timers-system-clock-callback (psx-timers psx))
+        (lambda () (psx-scheduler:scheduler-master-clock (psx-scheduler psx))))
+  (psx-timers:init-timers (psx-timers psx))
   (values))
 
 ; TODO(Samantha): Rename this to something more descriptive
@@ -67,7 +70,7 @@
       ; TODO(Samantha): This isn't even kind of right. It should be tied to
       ; various clocks, not just each instruction.
       ; TODO(Samantha): Timers is dog slow, optimize it.
-      do (psx-timers:advance-timers (psx-timers psx) cpu-clocks)
+      do (psx-timers:sync-timers (psx-timers psx))
       do (psx-scheduler:sync-components (psx-scheduler psx) cpu-clocks)
       do (psx-joypads:tick-joypads (psx-joypads psx) cpu-clocks)))
   0)
