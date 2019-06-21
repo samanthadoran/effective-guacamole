@@ -25,10 +25,11 @@
    itself."
   (master-clock 0 :type (unsigned-byte 63))
   (components
-   (make-array '(1)
+   (make-array 2
                :element-type 'component
-               :initial-contents (vector (make-component)))
-   :type (simple-array component (1))))
+               :initial-contents (vector (make-component)
+                                         (make-component)))
+   :type (simple-array component (2))))
 
 (declaim (ftype (function (scheduler keyword (unsigned-byte 63)))))
 (defun register-sync-event (scheduler component epoch-of-next-sync)
@@ -40,6 +41,10 @@
          (:gpu (setf (component-epoch-of-next-sync
                       (aref (scheduler-components scheduler)
                             0))
+                     epoch-of-next-sync))
+         (:timers (setf (component-epoch-of-next-sync
+                      (aref (scheduler-components scheduler)
+                            1))
                      epoch-of-next-sync))))
 
 (declaim (ftype (function (scheduler (unsigned-byte 63)))

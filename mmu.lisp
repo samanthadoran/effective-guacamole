@@ -269,6 +269,11 @@
    (lambda ()
            (psx-input:controller-callback 1)))
   (setf
+   (psx-timers:timers-sync-callback (psx-timers psx))
+   (lambda (clock) (psx-scheduler:register-sync-event (psx-scheduler psx)
+                                                      :timers
+                                                      clock)))
+  (setf
    (psx-timers:timers-exception-callback (psx-timers psx))
    (lambda (keyword)
            (psx-irq::raise-interrupt (psx-irq psx) keyword)

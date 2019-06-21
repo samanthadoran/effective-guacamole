@@ -3,7 +3,7 @@
   (:use :cl)
   (:export #:timers #:make-timers #:read-timers #:write-timers
            #:advance-timers #:timers-exception-callback
-           #:sync-timers #:init-timers))
+           #:sync-timers #:init-timers #:timers-sync-callback))
 
 (in-package :psx-timers)
 (declaim (optimize (speed 3) (safety 1)))
@@ -21,6 +21,10 @@
   (clock-source-callback
    (lambda () 0)
    :type (function () (unsigned-byte 63)))
+  (cycles-till-value
+   (lambda (value) value)
+   :type (function ((unsigned-byte 63))
+                   (unsigned-byte 63)))
   (reached-max-value nil :type boolean)
   (reached-target-value nil :type boolean)
   (fired-irq nil :type boolean))
@@ -75,6 +79,9 @@
   ; notes to complain.
   (clock 0 :type (unsigned-byte 63))
   ; TODO(Samantha): Add dotclock and hblank callbacks.
+  (sync-callback
+   (lambda (clock) (declare (ignore clock)))
+   :type (function ((unsigned-byte 63))))
   (system-clock-callback
    (lambda () 0)
    :type (function () (unsigned-byte 63)))
@@ -93,62 +100,92 @@
 (declaim (ftype (function (timers timer (integer 0 3)))
                 set-clocksource))
 (defun set-clocksource (timers timer source)
-  (let ((mode (timer-mode timer)))
+  (let* ((mode (timer-mode timer))
+         (cycles-till-value
+          (lambda (value)
+                  (- value
+                     (funcall
+                      (mode-clock-source-callback mode))))))
 
-    ; TODO(Samantha): Set the clock-source-callback in here somewhere.
     (ecase (timer-identifier timer)
            (:timer0
             (ecase source
                    ; System clock
                    (0 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; Dotclock
                    ; TODO(Samantha): Change this to the proper source
                    (1 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; System clock
                    (2 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; Dot clock
                    ; TODO(Samantha): Change this to the proper source
                    (3 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))))
            (:timer1
             (ecase source
                    ; System clock
                    (0 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; Hblank
                    ; TODO(Samantha): Change this to the proper source
                    (1 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; System clock
                    (2 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; Hblank
                    ; TODO(Samantha): Change this to the proper source
                    (3 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))))
            (:timer2
             (ecase source
                    ; System clock
                    (0 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; System clock
                    (1 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers)))
+                            (timers-system-clock-callback timers))
+                      (setf (mode-cycles-till-value mode)
+                            cycles-till-value))
                    ; System clock div 8
                    (2 (setf (mode-clock-source-callback mode)
                             (lambda ()
                                     (truncate (/ (funcall
                                                   (timers-system-clock-callback timers))
-                                                 8.0)))))
+                                                 8.0))))
+                      (setf (mode-cycles-till-value mode)
+                            (lambda (value)
+                                    (* 8 (funcall cycles-till-value value)))))
                    ; System clock div 8
                    (3 (setf (mode-clock-source-callback mode)
                             (lambda ()
                                     (truncate (/ (funcall
                                                   (timers-system-clock-callback timers))
-                                                 8.0))))))))
+                                                 8.0))))
+                      (setf (mode-cycles-till-value mode)
+                            (lambda (value)
+                                    (* 8 (funcall cycles-till-value value))))))))
     (setf (timer-source-sync-epoch timer)
           (funcall (mode-clock-source-callback mode)))
     (setf (mode-clock-source mode)
@@ -231,6 +268,23 @@
     ; maximum value and register a sync.
     (values)))
 
+(declaim (ftype (function (timer)
+                          (unsigned-byte 63))
+                ticks-until-nece))
+(defun ticks-until-necessary-sync (timer)
+  (funcall
+   (mode-cycles-till-value (timer-mode timer))
+   (+
+    (timer-source-sync-epoch timer)
+    (min (if (< (- (timer-target-value timer)
+                   (timer-current-value timer))
+                0)
+           #x1FFFF
+           (- (timer-target-value timer)
+            (timer-current-value timer)))
+         (- #xFFFF
+            (timer-current-value timer))))))
+
 (declaim (ftype (function (timers))
                 init-timers))
 (defun init-timers (timers)
@@ -243,12 +297,17 @@
 (defun sync-timers (timers)
   (loop for timer across (timers-timers timers)
     do (sync-timer timers timer))
+  (funcall (timers-sync-callback timers)
+           (min (ticks-until-necessary-sync (aref (timers-timers timers) 0))
+                (ticks-until-necessary-sync (aref (timers-timers timers) 1))
+                (ticks-until-necessary-sync (aref (timers-timers timers) 2))))
   (values))
 
 (declaim (ftype (function (timers (unsigned-byte 8))
                           (unsigned-byte 16))
                 read-timers))
 (defun read-timers (timers offset)
+  (sync-timers timers)
   (let ((timer (aref (timers-timers timers) (ldb (byte 2 4) offset))))
     (case (ldb (byte 4 0) offset)
       (0 (timer-current-value timer))
@@ -281,4 +340,5 @@
        (error "Invalid timer register index: #x~1,'0x with timer ~
                              number: #x~1,'0x"
               (ldb (byte 4 0) offset) (ldb (byte 2 4) offset))))
+    (sync-timers timers)
     value))
