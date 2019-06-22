@@ -85,9 +85,15 @@
                           (unsigned-byte 8))
                 get-stat))
 (defun get-stat (cdrom)
-  (declare (ignore cdrom))
   ; TODO(Samantha): Actually implement this.
-  #x10)
+  ; Shell open?
+  (ash
+   (if (ldb-test (byte 1 0)
+                 (car
+                  (array-dimensions (cdrom-image cdrom))))
+     1
+     0)
+   4))
 
 (declaim (ftype (function (cdrom (unsigned-byte 8)))
                 write-interrupt-flag))
@@ -136,7 +142,7 @@
          ;; GetStat
          (#x1
            (setf (cdrom-response-fifo cdrom)
-                 (with-last (cdrom-response-fifo cdrom) #x10))
+                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
 
            (raise-cdrom-interrupt cdrom #x3))
          ;; Tests with subfunctions
