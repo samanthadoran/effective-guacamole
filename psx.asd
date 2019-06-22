@@ -37,9 +37,7 @@
                (:file "instructions/instruction-macros" :depends-on ("cpu"))
                (:file "instructions/arithmeticops" :depends-on ("cpu"))
                (:file "instructions/branchops" :depends-on ("cpu"))
-               (:file "instructions/loadstoreops" :depends-on ("cpu"))
-               (:file "instructions/instructions" :depends-on ("cpu"))
-               (:file "util/missing_ops" :depends-on ("cpu")))
+               (:file "instructions/loadstoreops" :depends-on ("cpu")))
   :in-order-to ((test-op (test-op #:psx/tests))))
 
 (defsystem #:psx/tests
