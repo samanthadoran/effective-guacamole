@@ -20,18 +20,18 @@
   (clock-source 0 :type (integer 0 3))
   (clock-source-callback
    (lambda () 0)
-   :type (function () (unsigned-byte 63)))
+   :type (function () (unsigned-byte 62)))
   (cycles-till-value
    (lambda (value) value)
-   :type (function ((unsigned-byte 63))
-                   (unsigned-byte 63)))
+   :type (function ((unsigned-byte 62))
+                   (unsigned-byte 62)))
   (reached-max-value nil :type boolean)
   (reached-target-value nil :type boolean)
   (fired-irq nil :type boolean))
 
 (defstruct timer
   (identifier :timer0 :type keyword)
-  (source-sync-epoch 0 :type (unsigned-byte 63))
+  (source-sync-epoch 0 :type (unsigned-byte 62))
   (current-value 0 :type (unsigned-byte 16))
   (target-value 0 :type (unsigned-byte 16))
   (mode (make-mode) :type mode)
@@ -77,14 +77,14 @@
 (defstruct timers
   ; TODO(Samantha): Figure out why this being 64 bit causes SBCL optimization
   ; notes to complain.
-  (clock 0 :type (unsigned-byte 63))
+  (clock 0 :type (unsigned-byte 62))
   ; TODO(Samantha): Add dotclock and hblank callbacks.
   (sync-callback
    (lambda (clock) (declare (ignore clock)))
-   :type (function ((unsigned-byte 63))))
+   :type (function ((unsigned-byte 62))))
   (system-clock-callback
    (lambda () 0)
-   :type (function () (unsigned-byte 63)))
+   :type (function () (unsigned-byte 62)))
   (exception-callback
    (lambda (keyword) (declare (ignore keyword)) 0)
    :type (function (keyword) (unsigned-byte 9)))
@@ -107,8 +107,8 @@
                      (funcall
                       (mode-clock-source-callback mode))))))
 
-    (declare ((function ((unsigned-byte 63))
-                              (unsigned-byte 63))
+    (declare ((function ((unsigned-byte 62))
+                              (unsigned-byte 62))
               cycles-till-value))
 
     (ecase (timer-identifier timer)
@@ -270,7 +270,7 @@
     (values)))
 
 (declaim (ftype (function (timer)
-                          (unsigned-byte 63))
+                          (unsigned-byte 62))
                 ticks-until-nece))
 (defun ticks-until-necessary-sync (timer)
   (funcall

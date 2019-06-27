@@ -14,16 +14,16 @@
   "Represents a syncable component."
   ; TODO(Samantha): It might finally be time to make this a class and have the
   ; syncable components inherit from it.
-  (epoch-of-next-sync 0 :type (unsigned-byte 63))
+  (epoch-of-next-sync 0 :type (unsigned-byte 62))
   (sync-callback
    (lambda (clock) (declare (ignore clock)))
-   :type (function ((unsigned-byte 63)))))
+   :type (function ((unsigned-byte 62)))))
 
 (defstruct scheduler
   "Records all of the various syncable components and the system's master clock.
    Responsible for handling sync event registration and component syncing
    itself."
-  (master-clock 0 :type (unsigned-byte 63))
+  (master-clock 0 :type (unsigned-byte 62))
   (components
    (make-array '(3)
                :element-type 'component
@@ -32,7 +32,7 @@
                                          (make-component)))
    :type (simple-array component (3))))
 
-(declaim (ftype (function (scheduler keyword (unsigned-byte 63)))))
+(declaim (ftype (function (scheduler keyword (unsigned-byte 62)))))
 (defun register-sync-event (scheduler component epoch-of-next-sync)
   "Sets a definitive time for when a component knows it will _need_ to sync.
    Pleast note that this is not the only way a component can sync, as is the
@@ -52,14 +52,14 @@
                                 2))
                          epoch-of-next-sync))))
 
-(declaim (ftype (function (scheduler (unsigned-byte 63)))
+(declaim (ftype (function (scheduler (unsigned-byte 62)))
                 sync-components))
 (defun sync-components (scheduler clocks)
   "Loops through all registered syncable components and updates those that have
    registered a predicted sync."
   (let ((previous-clock (scheduler-master-clock scheduler)))
     (setf (scheduler-master-clock scheduler)
-          (ldb (byte 63 0) (+ (scheduler-master-clock scheduler)
+          (ldb (byte 62 0) (+ (scheduler-master-clock scheduler)
                               clocks)))
     (loop for component across (scheduler-components scheduler)
       do (when (<= (1+ previous-clock)
