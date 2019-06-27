@@ -44,7 +44,7 @@
    (ash (cdrom-index cdrom) 0)
    (ash (if (empty? (cdrom-xa-adpcm-fifo cdrom)) 0 1) 2)
    (ash (if (empty? (cdrom-parameter-fifo cdrom)) 1 0) 3)
-   (ash (if (= 16 (size (cdrom-parameter-fifo cdrom))) 0 1) 4)
+   (ash (if (= 16 (the fixnum (size (cdrom-parameter-fifo cdrom)))) 0 1) 4)
    (ash (if (empty? (cdrom-response-fifo cdrom)) 0 1) 5)
    (ash (if (empty? (cdrom-data-fifo cdrom)) 0 1) 6)
    (ash (if (cdrom-command-busy cdrom) 1 0) 7)))
@@ -77,7 +77,7 @@
   "Handles adding items to the parameter fifo. If there are 16 items in
   the fifo, it throws the given value away."
   ; TODO(Samantha): Verify behaviour past 16 values?
-  (unless (= 16 (size (cdrom-parameter-fifo cdrom)))
+  (unless (= 16 (the fixnum (size (cdrom-parameter-fifo cdrom))))
     (setf (cdrom-parameter-fifo cdrom)
           (with-last (cdrom-parameter-fifo cdrom) value))))
 
