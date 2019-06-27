@@ -15,7 +15,7 @@
     (sdl2-game-controller-db:load-db)
     (setf *sdl2-pads*
           (make-array 10 :initial-element nil))
-    (loop for i from 0 to (1- (sdl2:joystick-count)) do
+    (loop for i from 0 to (1- (the fixnum (sdl2:joystick-count))) do
       (unless (aref *sdl2-pads* i)
         (when (sdl2:game-controller-p i)
           (setf (aref *sdl2-pads* i)

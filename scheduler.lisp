@@ -53,8 +53,9 @@
   "Loops through all registered syncable components and updates those that have
    registered a predicted sync."
   (let ((previous-clock (scheduler-master-clock scheduler)))
-    (incf (scheduler-master-clock scheduler)
-          clocks)
+    (setf (scheduler-master-clock scheduler)
+          (ldb (byte 63 0) (+ (scheduler-master-clock scheduler)
+                              clocks)))
     (loop for component across (scheduler-components scheduler)
       do (when (<= (1+ previous-clock)
                    (component-epoch-of-next-sync component)

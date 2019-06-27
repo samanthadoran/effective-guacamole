@@ -107,6 +107,10 @@
                      (funcall
                       (mode-clock-source-callback mode))))))
 
+    (declare ((function ((unsigned-byte 63))
+                              (unsigned-byte 63))
+              cycles-till-value))
+
     (ecase (timer-identifier timer)
            (:timer0
             (ecase source
@@ -237,8 +241,7 @@
 
     (when (<= (1+ old-value)
               #xFFFF
-              (+ old-value
-                 cycles-since-sync))
+              (timer-current-value timer))
 
       (setf (mode-reached-max-value mode)
             t)
@@ -249,16 +252,16 @@
 
     (when (<= (1+ old-value)
               (timer-target-value timer)
-              (+ old-value
-                 cycles-since-sync))
+              (timer-current-value timer))
 
       (setf (mode-reached-target-value mode)
             t)
 
       (when (eql (mode-zero-counter-condition mode) :at-target)
         (setf (timer-current-value timer)
-              (mod (+ (timer-current-value timer)
-                      cycles-since-sync)
+              (mod (ldb (byte 64 0)
+                        (+ (timer-current-value timer)
+                           cycles-since-sync))
                    (timer-target-value timer))))
 
       (when (mode-irq-at-max-value mode)
