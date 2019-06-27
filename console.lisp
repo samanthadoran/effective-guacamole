@@ -53,6 +53,10 @@
         (lambda (epoch)
                 (declare (ignore epoch))
                 (psx-timers:sync-timers (psx-timers psx))))
+  (setf (psx-scheduler:component-sync-callback
+         (aref (psx-scheduler:scheduler-components (psx-scheduler psx)) 2))
+        (lambda (epoch)
+                (psx-joypads:sync (psx-joypads psx) epoch)))
   (setf (psx-timers::timers-system-clock-callback (psx-timers psx))
         (lambda () (psx-scheduler:scheduler-master-clock (psx-scheduler psx))))
   (psx-timers:init-timers (psx-timers psx))
@@ -71,6 +75,5 @@
   (psx-input:init-pads)
   (let ((psx (make-console bios-rom-path)))
     (loop for cpu-clocks = (step-cpu (psx-cpu psx))
-      do (psx-scheduler:sync-components (psx-scheduler psx) cpu-clocks)
-      do (psx-joypads:tick-joypads (psx-joypads psx) cpu-clocks)))
+      do (psx-scheduler:sync-components (psx-scheduler psx) cpu-clocks)))
   0)

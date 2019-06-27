@@ -10,6 +10,8 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (psx-joypads:sync (psx-joypads psx)
+                         (psx-scheduler:scheduler-master-clock (psx-scheduler psx)))
        (ldb (byte 8 0) (psx-joypads:read-joypads
                         (psx-joypads psx)
                         (mod address +joypad-registers-begin+))))
@@ -38,6 +40,8 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (psx-joypads:sync (psx-joypads psx)
+                         (psx-scheduler:scheduler-master-clock (psx-scheduler psx)))
        (ldb (byte 16 0) (psx-joypads:read-joypads
                          (psx-joypads psx)
                          (mod address +joypad-registers-begin+))))
@@ -94,6 +98,8 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (psx-joypads:sync (psx-joypads psx)
+                         (psx-scheduler:scheduler-master-clock (psx-scheduler psx)))
        (ldb (byte 8 0) (psx-joypads:write-joypads
                         (psx-joypads psx)
                         (mod address +joypad-registers-begin+)
@@ -120,6 +126,8 @@
   (let ((address (mask-address address)))
     (cond
       ((in-range +joypad-registers-begin+ +joypad-registers-size+ address)
+       (psx-joypads:sync (psx-joypads psx)
+                         (psx-scheduler:scheduler-master-clock (psx-scheduler psx)))
        (psx-joypads:write-joypads (psx-joypads psx)
                                   (mod address +joypad-registers-begin+)
                                   value))
@@ -260,6 +268,11 @@
            0))
   ; TODO(Samantha): Why can't sbcl figure the type of these
   ; arrays without hints?
+  (setf
+   (psx-joypads:joypads-sync-callback (psx-joypads psx))
+   (lambda (clock) (psx-scheduler:register-sync-event (psx-scheduler psx)
+                                                      :joypads
+                                                      clock)))
   (setf
    (psx-joypads:controller-buttons-callback (aref (the (simple-array psx-joypads::controller)(psx-joypads:joypads-controllers (psx-joypads psx))) 0))
    (lambda ()

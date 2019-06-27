@@ -4,7 +4,8 @@
   (:export #:joypads #:make-joypads #:joypads-exception-callback
            #:tick-controllers-and-memory-cards #:tick-joypads
            #:read-joypads #:write-joypads #:controller
-           #:controller-buttons-callback #:joypads-controllers))
+           #:controller-buttons-callback #:joypads-controllers
+           #:sync #:joypads-sync-callback))
 
 (in-package :psx-joypads)
 
@@ -80,6 +81,7 @@
 
 
 (defstruct joypads
+  (system-clock 0 :type (unsigned-byte 63))
   (transmission-timer 0f0 :type single-float)
   (fired-interrupt nil :type boolean)
   (write-fifo (list) :type list)
@@ -96,6 +98,9 @@
    :type (simple-array controller (2)))
   ; The joypads/memory cards know nothing about the higher up architecture, so
   ; we just use a closure defined in the mmu to fire off any interrupts.
+  (sync-callback
+   (lambda (clock) (declare (ignore clock)))
+   :type (function ((unsigned-byte 63))))
   (exception-callback
    (lambda () 0)
    :type (function () (unsigned-byte 8)))
@@ -168,6 +173,14 @@
     (log:debug "Read 0x~8,'0x from joypads at offset 0x~1,'0x~%" result offset)
     result))
 
+(declaim (ftype (function (joypads (unsigned-byte 63))
+                          single-float)
+                cpu-clocks-to-joypad-clocks)
+         (inline joypad-clocks-to-cpu-clocks))
+(defun joypad-clocks-to-cpu-clocks (joypads clocks)
+  (declare (ignore joypads))
+  (* 1.0 clocks))
+
 (declaim (ftype (function (joypads (unsigned-byte 4) (unsigned-byte 16))
                           (unsigned-byte 16))
                 write-joypads))
@@ -181,6 +194,11 @@
 
       (setf (joypads-transmission-timer joypads)
             (* .5f0 (* 8 (joypads-joy-baud joypads))))
+      (funcall (joypads-sync-callback joypads)
+               (+ (joypads-system-clock joypads)
+                  (ceiling
+                   (joypad-clocks-to-cpu-clocks joypads
+                                                (joypads-transmission-timer joypads)))))
       (setf (joypads-write-fifo joypads) (list value))
       (when (= value #x81)
         (error "Mem card?~%")))
@@ -259,7 +277,7 @@
             (setf (joypad-status-has-irq-7 (joypads-joy-stat joypads)) t))))))
   (values))
 
-(declaim (ftype (function (joypads (unsigned-byte 16))
+(declaim (ftype (function (joypads (unsigned-byte 63))
                           single-float)
                 cpu-clocks-to-joypad-clocks)
          (inline cpu-clocks-to-joypad-clocks))
@@ -280,7 +298,23 @@
 
   (values))
 
-(declaim (ftype (function (joypads (unsigned-byte 16)))
+(declaim (ftype (function (joypads (unsigned-byte 63)))
+                sync))
+(defun sync (joypads clock)
+  (tick-joypads joypads
+                (the (unsigned-byte 63) (- clock
+                                           (joypads-system-clock joypads))))
+  ; Sync with the rest of the system
+  (setf (joypads-system-clock joypads)
+        clock)
+  (funcall (joypads-sync-callback joypads)
+           (+ (joypads-system-clock joypads)
+              (ceiling
+               (joypad-clocks-to-cpu-clocks joypads
+                                            (joypads-transmission-timer joypads)))))
+  (values))
+
+(declaim (ftype (function (joypads (unsigned-byte 63)))
                 tick-joypads))
 (defun tick-joypads (joypads cpu-clocks)
   "Step joypad clocks forward according to specified number of cpu clocks."
