@@ -260,8 +260,9 @@
                (- (lines-per-frame (gpu-stat-video-mode (gpu-gpu-stat gpu)))
                   (gpu-current-scanline gpu))
                (1+ (gpu-display-end-y gpu))))))
-     (- (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu)))
-        (gpu-current-scanline-cycles gpu))))
+     (the (integer 0 3413)
+          (- (clocks-per-scanline (gpu-stat-video-mode (gpu-gpu-stat gpu)))
+             (gpu-current-scanline-cycles gpu)))))
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
@@ -990,8 +991,9 @@
                 update-scanline))
 (defun update-scanline (gpu cycles)
   (let ((video-mode (gpu-stat-video-mode (gpu-gpu-stat gpu))))
-    (incf (gpu-current-scanline-cycles gpu)
-          cycles)
+    (setf (gpu-current-scanline-cycles gpu)
+          (ldb (byte 63 0) (+ (gpu-current-scanline-cycles gpu)
+                              cycles)))
 
     (when (>= (gpu-current-scanline-cycles gpu) (clocks-per-scanline video-mode))
 
