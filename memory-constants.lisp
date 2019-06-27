@@ -20,7 +20,7 @@
            #:+joypad-registers-begin+ #:+joypad-registers-size+
            #:write-word-to-byte-array #:write-half-word-to-byte-array
            #:read-word-from-byte-array #:read-half-word-from-byte-array
-           #:is-cacheable))
+           #:is-cacheable #:memory-segment))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 0)))
@@ -90,8 +90,12 @@
 (defconstant +rom-exception-vector+ #xBFC00180)
 (defconstant +ram-exception-vector+ #x80000080)
 
+(deftype memory-segment ()
+  `(and (member :kseg0 :kseg1 :kseg2 :kuseg)
+        (satisfies keywordp)))
+
 (declaim (ftype (function ((unsigned-byte 32))
-                          keyword)
+                          memory-segment)
                 determine-segment)
          (inline determine-segment))
 (defun determine-segment (address)

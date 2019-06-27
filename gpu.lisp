@@ -13,6 +13,14 @@
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 1)))
 
+(deftype interlace-field ()
+  `(and (member :front :back)
+        (satisfies keywordp)))
+
+(deftype video-mode ()
+  `(and (member :ntsc :pal)
+        (satisfies keywordp)))
+
 ; TODO(Samantha): Convert (unsigned-byte 1) to boolean when it makes sense.
 (defstruct gpu-stat
   (texture-page-x-base 0 :type (unsigned-byte 4))
@@ -23,7 +31,7 @@
   (draw-to-display-area 0 :type (unsigned-byte 1))
   (set-mask-bit 0 :type (unsigned-byte 1))
   (draw-pixels 0 :type (unsigned-byte 1))
-  (interlace-field :front :type keyword)
+  (interlace-field :front :type interlace-field)
   ; According to nocash, this bit just causes strange effects on the
   ; display on real hardware; ignore?
   (reverse-flag 0 :type (unsigned-byte 1))
@@ -31,7 +39,7 @@
   (horizontal-resolution-2 0 :type (unsigned-byte 1))
   (horizontal-resolution-1 0 :type (unsigned-byte 2))
   (vertical-resolution 0 :type (unsigned-byte 1))
-  (video-mode :ntsc :type keyword)
+  (video-mode :ntsc :type video-mode)
   (display-area-color-depth 0 :type (unsigned-byte 1))
   (vertical-interlace nil :type boolean)
   (display-disabled 0 :type (unsigned-byte 1))
@@ -161,7 +169,7 @@
    (lambda () (values))
    :type (function ())))
 
-(declaim (ftype (function (keyword)
+(declaim (ftype (function (video-mode)
                           (or
                            (single-float 53.69 53.69)
                            (single-float 53.2224 53.2224)))
@@ -173,7 +181,7 @@
          (:ntsc 53.69)
          (:pal 53.2224)))
 
-(declaim (ftype (function (keyword (unsigned-byte 63))
+(declaim (ftype (function (video-mode (unsigned-byte 63))
                           single-float)
                 cpu-clocks-to-gpu-clocks)
          (inline cpu-clocks-to-gpu-clocks))
@@ -181,7 +189,7 @@
   "Converts cpu clocks into gpu clocks depending on the video mode."
   (* (/ (gpu-clock-speed video-mode) 33.868) cpu-clocks))
 
-(declaim (ftype (function (keyword (unsigned-byte 63))
+(declaim (ftype (function (video-mode (unsigned-byte 63))
                           single-float)
                 gpu-clocks-to-cpu-clocks)
          (inline gpu-clocks-to-cpu-clocks))
@@ -189,7 +197,7 @@
   "Converts gpu clocks into cpu clocks depending on the video mode."
   (* gpu-clocks (/ 33.868 (gpu-clock-speed video-mode))))
 
-(declaim (ftype (function (keyword)
+(declaim (ftype (function (video-mode)
                           (or
                            (integer 3406 3406)
                            (integer 3413 3413)))
@@ -202,7 +210,7 @@
          (:ntsc 3413)
          (:pal 3406)))
 
-(declaim (ftype (function (keyword)
+(declaim (ftype (function (video-mode)
                           (or
                            (integer 263 263)
                            (integer 314 314)))

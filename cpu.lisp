@@ -24,7 +24,7 @@
   ; giant case statement.
   (masked-opcode 0 :type (unsigned-byte 20))
   ; The memory segment in which this instruction was fetched from.
-  (segment :invalid :type keyword)
+  (segment :invalid :type memory-segment)
   (operation
    (lambda (cpu instruction)
            (declare (ignore cpu instruction))
