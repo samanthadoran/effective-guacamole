@@ -49,6 +49,8 @@
   (setf (surface-title (current-surface (cepl-context)))
         "Effective Guacamole"))
 
+(defparameter *tex* (make-texture nil :dimensions '(512 1024) :element-type :short))
+
 (declaim (ftype (function (gpu))
                 draw))
 (defun draw (gpu)
@@ -67,14 +69,16 @@
       (error "Finally.~%"))
     (decay-events)
     (clear)
+    (when (gpu-updated-vram gpu)
+      (free-texture *tex*)
+      (setf *tex* (make-texture (gpu-vram gpu) :element-type :short)))
     (let* ((vao-indices (make-gpu-array
                          (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
                          :element-type :USHORT))
            (vao (make-gpu-array
                  (gpu-render-list gpu)
                  :element-type 'our-vert))
-           (vram-tex (make-texture (gpu-vram gpu) :element-type :short))
-           (vram-sampler (sample vram-tex))
+           (vram-sampler (sample *tex*))
            (buffer-stream (make-buffer-stream
                            vao
                            :length (gpu-render-list-length gpu)
@@ -85,7 +89,6 @@
              :vram vram-sampler)
       (free-buffer-stream buffer-stream)
       (free-gpu-array vao)
-      (free-texture vram-tex)
       (free-sampler vram-sampler)
       (free-gpu-array vao-indices))
     (swap))

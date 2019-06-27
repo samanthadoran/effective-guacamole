@@ -8,7 +8,7 @@
            #:gpu-render-callback #:gpu-exception-callback #:make-gpu
            #:read-gpu #:write-gpu #:tick-gpu #:gpu-sync-callback
            #:gpu-gpu-stat #:gpu-stat-to-word #:sync
-           #:power-on))
+           #:power-on #:gpu-updated-vram))
 
 (in-package :psx-gpu)
 (declaim (optimize (speed 3) (safety 1)))
@@ -123,6 +123,7 @@
 
 (defstruct gpu
   "A model psx gpu"
+  (updated-vram nil :type boolean)
   (system-clock 0 :type (unsigned-byte 63))
   (gpu-stat (make-gpu-stat) :type gpu-stat)
   ; Not sure how to group the following variables. Maybe some sort of
@@ -388,6 +389,8 @@
       (gp0-operation-required-number-of-arguments
        (gpu-gp0-op gpu))
       0)))
+
+  (setf (gpu-updated-vram gpu) t)
 
   (setf
    (aref (gpu-vram gpu) *ypos* *xpos*)
@@ -1032,6 +1035,7 @@
   (incf (gpu-frame-counter gpu))
   (funcall (gpu-exception-callback gpu))
   (funcall (gpu-render-callback gpu))
+  (setf (gpu-updated-vram gpu) nil)
   ; Once we're done rendering, the render list needs to be cleared or we
   ; will just keep accumulating old frame data.
   (setf (gpu-render-list gpu) (list))
