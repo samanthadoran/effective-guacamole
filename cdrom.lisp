@@ -114,7 +114,7 @@
 
   (values))
 
-(declaim (ftype (function (cdrom (unsigned-byte 8)))
+(declaim (ftype (function (cdrom (integer 0 16)))
                 raise-cdrom-interrupt))
 (defun raise-cdrom-interrupt (cdrom interrupt)
   "Conditionally adds a pending interrupt to the queue depending on the mask."
