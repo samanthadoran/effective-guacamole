@@ -103,7 +103,7 @@
   (let* ((mode (timer-mode timer))
          (cycles-till-value
           (lambda (value)
-                  (- value
+                  (- (the (unsigned-byte 62) value)
                      (funcall
                       (mode-clock-source-callback mode))))))
 
@@ -180,7 +180,9 @@
                                                  8.0))))
                       (setf (mode-cycles-till-value mode)
                             (lambda (value)
-                                    (* 8 (funcall cycles-till-value value)))))
+                                    (ldb
+                                     (byte 62 0)
+                                     (* 8 (funcall cycles-till-value value))))))
                    ; System clock div 8
                    (3 (setf (mode-clock-source-callback mode)
                             (lambda ()
@@ -189,7 +191,9 @@
                                                  8.0))))
                       (setf (mode-cycles-till-value mode)
                             (lambda (value)
-                                    (* 8 (funcall cycles-till-value value))))))))
+                                    (ldb
+                                     (byte 62 0)
+                                     (* 8 (funcall cycles-till-value value)))))))))
     (setf (timer-source-sync-epoch timer)
           (funcall (mode-clock-source-callback mode)))
     (setf (mode-clock-source mode)

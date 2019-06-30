@@ -127,12 +127,11 @@
 (defun mask-address (address)
   "Performs a bitmask of the given address to get an absolute address based
    upon the segment of memory."
-  (case (determine-segment address)
+  (ecase (determine-segment address)
     (:kseg2 address)
     (:kseg1 (ldb (byte 29 0) address))
     (:kseg0 (ldb (byte 31 0) address))
-    (:kuseg address)
-    (otherwise (error "Unreachable!~%"))))
+    (:kuseg address)))
 
 (declaim (ftype (function ((unsigned-byte 32)
                            (unsigned-byte 32)
