@@ -175,11 +175,13 @@
 
 (declaim (ftype (function (joypads (unsigned-byte 62))
                           single-float)
-                cpu-clocks-to-joypad-clocks)
+                joypad-clocks-to-cpu-clocks)
          (inline joypad-clocks-to-cpu-clocks))
-(defun joypad-clocks-to-cpu-clocks (joypads clocks)
+(defun joypad-clocks-to-cpu-clocks (joypads cpu-clocks)
+  "Converts joypad clock ticks into cpu clock ticks."
+  ; TODO(Samantha): Implement.
   (declare (ignore joypads))
-  (* 1.0 clocks))
+  (* 1.0 cpu-clocks))
 
 (declaim (ftype (function (joypads (unsigned-byte 4) (unsigned-byte 16))
                           (unsigned-byte 16))
@@ -200,7 +202,9 @@
                        (ceiling
                         (joypad-clocks-to-cpu-clocks
                          joypads
-                         (joypads-transmission-timer joypads))))))
+                         (ldb (byte 32 0)
+                              (ceiling
+                               (joypads-transmission-timer joypads))))))))
       (setf (joypads-write-fifo joypads) (list value))
       (when (= value #x81)
         (error "Mem card?~%")))
@@ -315,7 +319,9 @@
                    (ceiling
                     (joypad-clocks-to-cpu-clocks
                      joypads
-                     (joypads-transmission-timer joypads))))))
+                     (ldb (byte 32 0)
+                          (ceiling
+                           (joypads-transmission-timer joypads))))))))
   (values))
 
 (declaim (ftype (function (joypads (unsigned-byte 62)))
