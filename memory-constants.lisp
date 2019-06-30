@@ -180,7 +180,8 @@
   "Translates a psx unsigned word into a lisp signed int for easier arithmetic."
   ; If the MSB is set, do the inversions.
   (if (ldb-test (byte 1 31) to-be-converted)
-    (* (the (signed-byte 32) -1) (wrap-word (1+ (lognot to-be-converted))))
+    (* (the (signed-byte 32) -1)
+       (wrap-word (1+ (the (signed-byte 32) (lognot to-be-converted)))))
     to-be-converted))
 
 (declaim (ftype (function ((simple-array (unsigned-byte 8))

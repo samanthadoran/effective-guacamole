@@ -195,11 +195,12 @@
       (setf (joypads-transmission-timer joypads)
             (* .5f0 (* 8 (joypads-joy-baud joypads))))
       (funcall (joypads-sync-callback joypads)
-               (+ (joypads-system-clock joypads)
-                  (ceiling
-                   (joypad-clocks-to-cpu-clocks
-                    joypads
-                    (joypads-transmission-timer joypads)))))
+               (ldb (byte 62 0)
+                    (+ (joypads-system-clock joypads)
+                       (ceiling
+                        (joypad-clocks-to-cpu-clocks
+                         joypads
+                         (joypads-transmission-timer joypads))))))
       (setf (joypads-write-fifo joypads) (list value))
       (when (= value #x81)
         (error "Mem card?~%")))
@@ -309,7 +310,7 @@
   (setf (joypads-system-clock joypads)
         clock)
   (funcall (joypads-sync-callback joypads)
-           (ldb (byte 63 0)
+           (ldb (byte 62 0)
                 (+ (joypads-system-clock joypads)
                    (ceiling
                     (joypad-clocks-to-cpu-clocks
