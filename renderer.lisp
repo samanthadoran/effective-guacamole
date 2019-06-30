@@ -43,6 +43,7 @@
   :fragment (frag-stage :vec3 :vec2))
 
 (defparameter *time* (get-internal-real-time))
+(declaim ((integer 0 *) *time*))
 
 (defun initialize ()
   (cepl:repl 1024 512)
