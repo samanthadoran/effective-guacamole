@@ -129,11 +129,20 @@
 
 (declaim (ftype (function (cpu (unsigned-byte 5) (unsigned-byte 32))
                           (unsigned-byte 32))
-                set-register))
+                set-register)
+         (inline set-register))
 (defun set-register (cpu index value)
   "Immediately writes a value to a register, ignoring any and all load delays."
   (setf (aref (cpu-registers cpu) index) value)
   (setf (aref (cpu-registers cpu) 0) 0))
+
+(declaim (ftype (function (cpu (unsigned-byte 32))
+                          (unsigned-byte 32))
+                tick)
+         (inline tick))
+(defun tick (cpu ticks)
+  (setf (cpu-ticks cpu)
+        (wrap-word (+ ticks (cpu-ticks cpu)))))
 
 (declaim (ftype (function (cpu))
                 invalidate-cache))
@@ -156,13 +165,6 @@
        (setf (aref (cache-line-instructions-as-words cache-line) index)
              (make-instruction))))
     (values)))
-
-(declaim (ftype (function (cpu (unsigned-byte 32))
-                          (unsigned-byte 32))
-                tick))
-(defun tick (cpu ticks)
-  (setf (cpu-ticks cpu)
-        (wrap-word (+ ticks (cpu-ticks cpu)))))
 
 (declaim (ftype (function ((unsigned-byte 32))
                           (unsigned-byte 32))
@@ -233,6 +235,7 @@
          (cache-line (aref (cpu-cache-lines cpu)
                            (ldb (byte 8 4) instruction-address)))
          (index (ldb (byte 2 2) instruction-address)))
+    (tick cpu 1)
     (when (or (/= tag (cache-line-tag cache-line))
               (not (aref (cache-line-valid cache-line) index)))
       (setf (cache-line-tag cache-line) tag)
