@@ -29,6 +29,8 @@
                  address)
        ; We don't care about the expansion port just yet, return a dummy value.
        #xFF)
+      ((in-range +data-cache-begin+ +data-cache-size+ address)
+       (aref (psx-data-cache psx) (mod address #x400)))
       ; Unimplemented.
       (t (error "Byte reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -55,6 +57,9 @@
        (psx-irq:read-irq (psx-irq psx) (mod address +irq-registers-begin+)))
       ((in-range +timers-begin+ +timers-size+ address)
        (psx-timers:read-timers (psx-timers psx) (mod address +timers-begin+)))
+      ((in-range +data-cache-begin+ +data-cache-size+ address)
+       (read-half-word-from-byte-array (psx-data-cache psx)
+                                       (mod address #x400)))
       ; Unimplemented.
       (t (error "Half-word reads to 0x~8,'0X are unimplemented~%" address)))))
 
@@ -85,6 +90,9 @@
        (psx-gpu:sync (psx-gpu psx)
                      (psx-scheduler:scheduler-master-clock (psx-scheduler psx)))
        (psx-gpu:read-gpu (psx-gpu psx) (mod address +gpu-registers-begin+)))
+      ((in-range +data-cache-begin+ +data-cache-size+ address)
+       (read-word-from-byte-array (psx-data-cache psx)
+                                  (mod address #x400)))
       ; Unimplemented.
       (t (error "Word reads to 0x~8,'0X are unimplemented~%"
                 address)))))
@@ -115,6 +123,9 @@
        (setf
         (aref (psx-ram psx) (mod address +ram-size-non-mirrored+))
         value))
+      ((in-range +data-cache-begin+ +data-cache-size+ address)
+       (setf (aref (psx-data-cache psx) (mod address #x400))
+             value))
       ; Unimplemented.
       (t (error "Byte writes to 0x~8,'0X are unimplemented!~%" address)))))
 
@@ -147,6 +158,10 @@
        (psx-irq:write-irq (psx-irq psx)
                           (mod address +irq-registers-begin+)
                           value))
+      ((in-range +data-cache-begin+ +data-cache-size+ address)
+       (write-half-word-to-byte-array (psx-data-cache psx)
+                                      (mod address #x400)
+                                      value))
       ; Unimplemented.
       (t (error "Half-word writes to 0x~8,'0X are unimplemented!~%" address)))))
 
@@ -228,6 +243,10 @@
        (psx-dma:set-register (psx-dma psx)
                              (mod address +dma-registers-begin+)
                              value))
+      ((in-range +data-cache-begin+ +data-cache-size+ address)
+       (write-word-to-byte-array (psx-data-cache psx)
+                                 (mod address #x400)
+                                 value))
       ; Unimplemented.
       (t (error "Word writes to 0x~8,'0X are unimplemented!~%" address)))))
 

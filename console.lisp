@@ -27,7 +27,10 @@
   ; macroexpander cry.
   (ram
    (make-array #x200000 :element-type '(unsigned-byte 8) :initial-element 0)
-   :type (simple-array (unsigned-byte 8) (#x200000))))
+   :type (simple-array (unsigned-byte 8) (#x200000)))
+  (data-cache
+   (make-array #x400 :element-type '(unsigned-byte 8) :initial-element 0)
+   :type (simple-array (unsigned-byte 8) (#x400))))
 
 (defun load-rom-from-file (filepath)
   (with-open-file (stream filepath :element-type '(unsigned-byte 8))
@@ -69,9 +72,7 @@
     (console-on my-psx bios-rom-path)
     my-psx))
 
-(declaim (ftype (function (psx (or boolean pathname))
-                          boolean)
-                exe-should-be-loaded))
+; TODO(Samantha): Figure out the type specifier for this.
 (defun exe-should-be-loaded (psx exe-path)
   (and
    (= (psx-cpu::cpu-program-counter (psx-cpu psx)) #x80030000)
