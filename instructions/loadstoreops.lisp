@@ -63,7 +63,7 @@
 
 (def-i-type lhu #x25
   (if (/= 0 (mod address 2))
-    (trigger-exception cpu :cause :load-address-error)
+    (trigger-exception cpu :cause :address-load-error)
     (progn
      (setf (cpu-pending-load-register cpu) target-register-index)
      (setf
@@ -200,9 +200,13 @@
   (setf
    (cpu-pending-load-value cpu)
    (case destination-register-index
+     (6 (cop0:cop0-jump-destination-register (cpu-cop0 cpu)))
+     (7 (cop0:cop0-dcic-register (cpu-cop0 cpu)))
+     (8 (cop0:cop0-bad-virtual-address-register (cpu-cop0 cpu)))
      (12 (cop0:cop0-status-register (cpu-cop0 cpu)))
      (13 (cop0:cop0-cause-register (cpu-cop0 cpu)))
      (14 (cop0:cop0-epc-register (cpu-cop0 cpu)))
+     (15 (cop0:cop0-processor-id-register (cpu-cop0 cpu)))
      (otherwise
       (error "Unknown read to cop0$~d~%" destination-register-index)
       0))))
@@ -252,8 +256,7 @@
       target-register-value))
     ; CAUSE
     (13
-     (unless (zerop target-register-value)
-       (error "Are we actually storing to the cause?~%"))
+     (log:debug "Cop0 cause is not yet fully implemented.")
       (setf
        (cop0:cop0-cause-register (cpu-cop0 cpu))
        target-register-value))

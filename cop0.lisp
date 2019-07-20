@@ -6,7 +6,9 @@
            #:cop0-cause-register
            #:cop0-epc-register
            #:cop0-bad-virtual-address-register
-           #:cop0-processor-id-register))
+           #:cop0-processor-id-register
+           #:cop0-jump-destination-register
+           #:cop0-dcic-register))
 
 (in-package :psx-coprocessor0)
 
@@ -14,6 +16,8 @@
 
 (defstruct cop0
   "R3000 Coprocessor 0"
+  (dcic-register 0 :type (unsigned-byte 32))
+  (jump-destination-register 0 :type (unsigned-byte 32))
   (bad-virtual-address-register 0 :type (unsigned-byte 32))
   (cause-register 0 :type (unsigned-byte 32))
   (status-register 0 :type (unsigned-byte 32))
