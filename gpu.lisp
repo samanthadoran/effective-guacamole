@@ -123,6 +123,7 @@
 
 (defstruct gpu
   "A model psx gpu"
+  (gpu-read 0 :type (unsigned-byte 32))
   (updated-vram nil :type boolean)
   (system-clock 0 :type (unsigned-byte 62))
   (gpu-stat (make-gpu-stat) :type gpu-stat)
@@ -267,9 +268,8 @@
 
 (declaim (ftype (function (gpu) (unsigned-byte 32)) read-gpu-read))
 (defun read-gpu-read (gpu)
-  (declare (ignore gpu))
-  (log:debug "Reading from gpu-read is unimplemented! Returning 0.~%")
-  0)
+  (log:debug "Reading from gpu-read is not fully unimplemented!~%")
+  (gpu-gpu-read gpu))
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))
@@ -349,6 +349,13 @@
                (make-vertex v4 color)
                (gpu-render-list gpu)))
   (incf (gpu-render-list-length gpu) 6)
+  0)
+
+(declaim (ftype (function (gpu (unsigned-byte 32) (unsigned-byte 32))
+                          (unsigned-byte 32))
+                render-opaque-monochromatic-dot))
+(defun render-opaque-monochromatic-dot (gpu color v1)
+  (fill-rectangle gpu color v1 #x00010001)
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
@@ -650,10 +657,12 @@
                 fill-rectangle))
 (defun fill-rectangle (gpu color top-left size)
   (log:debug "GP0(#x02): fill-rectangle  is not implemented correctly!~%")
-  (let* ((left (logand #x3F0 (ldb (byte 16 0) top-left)))
-         (right (+ left (logand #x3F0 (+ #xF (ldb (byte 16 0) size)))))
-         (top (logand #x1FF (ldb (byte 16 16) top-left)))
-         (bottom (logand #x1FF (logand #xFFFF (+ top (ldb (byte 16 16) size))))))
+  (let* ((top (logand #x1FF (ldb (byte 16 16) top-left)))
+         (left (logand #x3F0 (ldb (byte 16 0) top-left)))
+         (height (logand (ldb (byte 16 16) size) #x1FF))
+         (width (logand #x3f0 (+ #xF (ldb (byte 15 0) size))))
+         (bottom (+ top height))
+         (right (+ left width)))
     (render-opaque-shaded-triangle gpu
                                    color (logior left (ash top 16))
                                    color (logior right (ash top 16))
@@ -745,6 +754,9 @@
       (#x28
         (setf required-arguments 5)
         (setf operation #'render-opaque-monochromatic-quadrilateral))
+      (#x68
+        (setf required-arguments 2)
+        (setf operation #'render-opaque-monochromatic-dot))
       (otherwise
        (error "Unrecognized GP0 opcode 0x~2,'0x. Full word: 0x~8,'0x"
               (ldb (byte 8 24) value)
@@ -913,6 +925,29 @@
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
                           (unsigned-byte 32))
+                gpu-info))
+(defun gpu-info (gpu value)
+  (setf (gpu-gpu-read gpu)
+        (let ((value (mod value #x8)))
+          (cond
+            ((= 2 value)
+             (logior (ash (gpu-texture-window-x-mask gpu) 0)
+                     (ash (gpu-texture-window-y-mask gpu) 5)
+                     (ash (gpu-texture-window-x-offset gpu) 10)
+                     (ash (gpu-texture-window-y-offset gpu) 15)))
+            ((= 3 value)
+             (logior (ash (gpu-drawing-area-left gpu) 0)
+                     (ash (gpu-drawing-area-top gpu) 10)))
+            ((= 4 value)
+             (logior (ash (gpu-drawing-area-right gpu) 0)
+                     (ash (gpu-drawing-area-bottom gpu) 10)))
+            ((= 5 value)
+             (logior (ash (gpu-drawing-offset-x gpu) 0)
+                     (ash (gpu-drawing-offset-y gpu) 11)))
+            (t (gpu-gpu-read gpu))))))
+
+(declaim (ftype (function (gpu (unsigned-byte 32))
+                          (unsigned-byte 32))
                 write-gp1))
 (defun write-gp1 (gpu value)
   (log:debug "GP1(#x~2,'0x)~%" (ldb (byte 8 24) value))
@@ -926,6 +961,7 @@
     (#x06 (set-display-bounds-horizontal gpu value))
     (#x07 (set-display-bounds-vertical gpu value))
     (#x08 (set-display-mode gpu value))
+    (#x10 (gpu-info gpu value))
     (otherwise
      (error "Unrecognized GP1 opcode 0x~2,'0x. Full word: 0x~8,'0x"
             (ldb (byte 8 24) value)
