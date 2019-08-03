@@ -355,7 +355,18 @@
                           (unsigned-byte 32))
                 render-opaque-monochromatic-dot))
 (defun render-opaque-monochromatic-dot (gpu color v1)
-  (fill-rectangle gpu color v1 #x00010001)
+  (let* ((left (ldb (byte 16 0) v1))
+        (right (1+ left))
+        (top (ldb (byte 16 16) v1))
+        (bottom (1+ top)))
+    (render-opaque-shaded-triangle gpu
+                                   color (logior left (ash top 16))
+                                   color (logior right (ash top 16))
+                                   color (logior right (ash bottom 16)))
+    (render-opaque-shaded-triangle gpu
+                                   color (logior right (ash bottom 16))
+                                   color (logior left (ash top 16))
+                                   color (logior left (ash bottom 16))))
   0)
 
 (declaim (ftype (function (gpu (unsigned-byte 32))
