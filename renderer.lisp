@@ -36,7 +36,7 @@
         (/ (aref color 1) 255.0)
         (/ (aref color 2) 255.0)
         0)
-    (texture vram (v! (/ (aref uv 0) 1024.0) (/ (aref uv 1) 512.0)))))
+    (texture vram uv)))
 
 (defpipeline-g some-pipeline ()
   :vertex (vert-stage our-vert)
