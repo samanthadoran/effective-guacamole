@@ -64,7 +64,7 @@
 
 (defun-g passthrough-frag ((uv :vec2)
                            &uniform (sam :sampler-2d))
-  (texture sam uv))
+  (texture sam (v! (/ (aref uv 0) 1024.0) (/ (aref uv 1) 512.0))))
 
 (defpipeline-g passthrough-pipeline ()
   :vertex (passthrough-vert g-pt)
@@ -104,10 +104,7 @@
                            :length (gpu-render-list-length gpu)
                            :index-array vao-indices)))
       (clear)
-      ; (map-g #'some-pipeline buffer-stream
-      ;        :offset (v! (gpu-drawing-offset-x gpu)
-      ;                    (gpu-drawing-offset-y gpu))
-      ;        :vram vram-sampler)
+      (setf *fbo-sample* (sample *fbo-tex*))
       (with-fbo-bound (*fbo*)
         (map-g #'some-pipeline buffer-stream
                :offset (v! (gpu-drawing-offset-x gpu)
@@ -115,13 +112,13 @@
                :vram vram-sampler))
       (map-g #'passthrough-pipeline
              (make-buffer-stream
-              (make-gpu-array (list (list (v! -1 1 0) (v! 0 1))
+              (make-gpu-array (list (list (v! -1 1 0) (v! 0 512))
                                     (list (v! -1 -1 0) (v! 0 0))
-                                    (list (v! 1 -1 0) (v! 1 0))
-                                    (list (v! 1 1 0) (v! 1 1)))
-                              :element-type 'g-pt)
-              :index-array (make-gpu-array (list 0 1 2 0 2 3)
-                                           :element-type :ushort))
+                                    (list (v! 1 -1 0) (v! 1024 0))
+                                    (list (v! -1 1 0) (v! 0 512))
+                                    (list (v! 1 -1 0) (v! 1024 0))
+                                    (list (v! 1 1 0) (v! 1024 512)))
+                              :element-type 'g-pt))
              :sam *fbo-sample*)
       (free-buffer-stream buffer-stream)
       (free-gpu-array vao)
