@@ -36,7 +36,7 @@
         (/ (aref color 1) 255.0)
         (/ (aref color 2) 255.0)
         0)
-    (texture vram (v! (/ (aref uv 0) 1024.0) (/ (aref uv 1) 512.0)))))
+    (texture vram uv)))
 
 (defpipeline-g some-pipeline ()
   :vertex (vert-stage our-vert)
@@ -55,7 +55,7 @@
 
 (defparameter *tex* (make-texture nil :dimensions '(512 1024) :element-type :short))
 
-(defparameter *fbo-tex* (make-texture nil :dimensions '(1024 512) :element-type :short))
+(defparameter *fbo-tex* (make-texture nil :dimensions '(1024 512) :element-type :rgba8))
 (defparameter *fbo* nil)
 (defparameter *fbo-sample* nil)
 
@@ -64,7 +64,7 @@
 
 (defun-g passthrough-frag ((uv :vec2)
                            &uniform (sam :sampler-2d))
-  (texture sam (v! (/ (aref uv 0) 1024.0) (/ (aref uv 1) 512.0))))
+  (texture sam uv))
 
 (defpipeline-g passthrough-pipeline ()
   :vertex (passthrough-vert g-pt)
@@ -112,12 +112,12 @@
                :vram vram-sampler))
       (map-g #'passthrough-pipeline
              (make-buffer-stream
-              (make-gpu-array (list (list (v! -1 1 0) (v! 0 512))
+              (make-gpu-array (list (list (v! -1 1 0) (v! 0 1))
                                     (list (v! -1 -1 0) (v! 0 0))
-                                    (list (v! 1 -1 0) (v! 1024 0))
-                                    (list (v! -1 1 0) (v! 0 512))
-                                    (list (v! 1 -1 0) (v! 1024 0))
-                                    (list (v! 1 1 0) (v! 1024 512)))
+                                    (list (v! 1 -1 0) (v! 1 0))
+                                    (list (v! -1 1 0) (v! 0 1))
+                                    (list (v! 1 -1 0) (v! 1 0))
+                                    (list (v! 1 1 0) (v! 1 1)))
                               :element-type 'g-pt))
              :sam *fbo-sample*)
       (free-buffer-stream buffer-stream)
