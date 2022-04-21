@@ -87,13 +87,16 @@
 (defun get-stat (cdrom)
   ; TODO(Samantha): Actually implement this.
   ; Shell open?
-  (ash
-   (if (ldb-test (byte 1 0)
-                 (car
-                  (array-dimensions (cdrom-image cdrom))))
-     1
-     0)
-   4))
+  (logior
+   (ash
+     (if (ldb-test (byte 1 0)
+                   (car
+                    (array-dimensions (cdrom-image cdrom))))
+       0
+       0)
+     4)
+   (ash 1 1)
+   (ash 1 5)))
 
 (declaim (ftype (function (cdrom (unsigned-byte 8)))
                 write-interrupt-flag))
@@ -167,13 +170,7 @@
   (ecase offset
          (0 (status-register cdrom))
          (1 (ecase (cdrom-index cdrom)
-                   (1
-                    (let ((response
-                           (or (fset:first (cdrom-response-fifo cdrom))
-                               0)))
-                      (setf (cdrom-response-fifo cdrom)
-                            (less-first (cdrom-response-fifo cdrom)))
-                      response))))
+                   (1 (read-response-fifo cdrom))))
          (3 (ecase (cdrom-index cdrom)
                    (0 (cdrom-interrupt-enable cdrom))
                    (1 (fset:first (cdrom-remaining-interrupts cdrom)))
