@@ -36,7 +36,7 @@
         (/ (aref color 1) 255.0)
         (/ (aref color 2) 255.0)
         0)
-    (texture vram (v! (/ (aref uv 0) 1024.0) (/ (aref uv 1) 512.0)))))
+    (texture vram (v! (/ (aref uv 0) 2048.0) (/ (aref uv 1) 512.0)))))
 
 (defpipeline-g some-pipeline ()
   :vertex (vert-stage our-vert)
@@ -75,7 +75,7 @@
       (setf *tex* (make-texture (gpu-vram gpu) :element-type :short)))
     (let* ((vao-indices (make-gpu-array
                          (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
-                         :element-type :USHORT))
+                         :element-type :UNSIGNED-INT))
            (vao (make-gpu-array
                  (gpu-render-list gpu)
                  :element-type 'our-vert))
