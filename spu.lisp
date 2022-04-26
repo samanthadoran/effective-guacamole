@@ -286,14 +286,11 @@
                (setf (spu-sound-ram-data-transfer-address spu) value)))
        (#x1A8 (progn
                ; TODO(Samantha): Actually make a fifo.
-               (setf (aref (spu-ram spu) (spu-transfer-address spu))
-                     (ldb (byte 8 0) value))
+               (write-half-word-to-byte-array (spu-ram spu)
+                                              (spu-transfer-address spu)
+                                              value)
                (setf  (spu-transfer-address spu)
-                      (mod (1+ (spu-transfer-address spu)) #x80000))
-               (setf (aref (spu-ram spu) (spu-transfer-address spu))
-                     (ldb (byte 8 8) value))
-               (setf  (spu-transfer-address spu)
-                      (mod (1+ (spu-transfer-address spu)) #x80000))
+                      (mod (+ (spu-transfer-address spu) 2) #x80000))
                (setf (spu-sound-ram-data-transfer-fifo spu) value)))
        (#x1AA (setf (spu-control spu) value))
        (#x1AC (setf (spu-sound-ram-data-transfer-control spu) value))
