@@ -170,7 +170,7 @@
             (to-signed-byte-32 target-register-value))))
     ; TODO(Samantha): Is this really doing what I think it's doing?
     ; TODO(Samantha): Figure out a testing framework for common lisp.
-    (if (< result #x-80000000)
+    (if (or (< result #x-80000000) (>= result #x80000000))
       (trigger-exception cpu :cause :arithmetic-overflow)
       (set-register cpu destination-register-index (wrap-word result)))))
 
