@@ -71,6 +71,31 @@
   (adsr-volume 0 :type (unsigned-byte 16))
   (adpcm-repeat-address 0 :type (unsigned-byte 16)))
 
+(defstruct spu-status
+  (current-spu-mode 0 :type (unsigned-byte 6))
+  (irq9 nil :type boolean)
+  (data-transfer-dma-read-write-request nil :type boolean)
+  (data-transfer-dma-write-request nil :type boolean)
+  (data-transfer-dma-read-request nil :type boolean)
+  (data-transfer-busy nil :type boolean)
+  (writing-to-capture-buffer :first :type keyword))
+
+(declaim (ftype (function (spu-status)
+                          (unsigned-byte 16))
+                spu-status-to-word))
+(defun spu-status-to-word (spu-status)
+  (logior
+   (ash (spu-status-current-spu-mode spu-status) 0)
+   (ash (if (spu-status-irq9 spu-status) 1 0) 6)
+   (ash (if (spu-status-data-transfer-dma-read-write-request spu-status) 1 0) 7)
+   (ash (if (spu-status-data-transfer-dma-write-request spu-status) 1 0) 8)
+   (ash (if (spu-status-data-transfer-dma-read-request spu-status) 1 0) 9)
+   (ash (if (spu-status-data-transfer-busy spu-status) 1 0) 10)
+   (ash (ecase (spu-status-writing-to-capture-buffer spu-status)
+               (:first 0)
+               (:second 1))
+        11)))
+
 (defstruct spu
   (main-volume-left 0 :type (unsigned-byte 16))
   (main-volume-right 0 :type (unsigned-byte 16))
@@ -91,13 +116,14 @@
   (control 0 :type (unsigned-byte 16))
   (sound-ram-data-transfer-control 0 :type (unsigned-byte 16))
   ; Spu status is read only.
-  (status 0 :type (unsigned-byte 16))
+  (status (make-spu-status) :type spu-status)
   (cd-volume-left 0 :type (unsigned-byte 16))
   (cd-volume-right 0 :type (unsigned-byte 16))
   (external-volume-left 0 :type (unsigned-byte 16))
   (external-volume-right 0 :type (unsigned-byte 16))
   (current-main-volume-left 0 :type (unsigned-byte 16))
   (current-main-volume-right 0 :type (unsigned-byte 16))
+  (transfer-address 0 :type (integer 0 #x80000))
   (ram (make-array #x80000 :element-type '(unsigned-byte 8) :initial-element 0)
        :type (simple-array (unsigned-byte 8) (#x80000)))
   (voices
@@ -169,7 +195,7 @@
        (#x1A8 (spu-sound-ram-data-transfer-fifo spu))
        (#x1AA (spu-control spu))
        (#x1AC (spu-sound-ram-data-transfer-control spu))
-       (#x1AE (spu-status spu))
+       (#x1AE (spu-status-to-word (spu-status spu)))
        (#x1B0 (spu-cd-volume-left spu))
        (#x1B2 (spu-cd-volume-right spu))
        (#x1B4 (spu-external-volume-left spu))
@@ -254,12 +280,29 @@
                     (+ offset +spu-registers-begin+)))
        (#x1A2 (setf (spu-sound-ram-reverb-work-area-start-address spu) value))
        (#x1A4 (setf (spu-sound-ram-irq-address spu) value))
-       (#x1A6 (setf (spu-sound-ram-data-transfer-address spu) value))
-       ; TODO(Samantha): Actually write these values to spu ram at the correct address.
-       (#x1A8 (setf (spu-sound-ram-data-transfer-fifo spu) value))
+       ; TODO(Samantha): This value is used as a base address for any transfers.
+       (#x1A6 (progn
+               (setf (spu-transfer-address spu) (mod (* value 8) #x80000))
+               (setf (spu-sound-ram-data-transfer-address spu) value)))
+       (#x1A8 (progn
+               ; TODO(Samantha): Actually make a fifo.
+               (setf (aref (spu-ram spu) (spu-transfer-address spu))
+                     (ldb (byte 8 0) value))
+               (setf  (spu-transfer-address spu)
+                      (mod (1+ (spu-transfer-address spu)) #x80000))
+               (setf (aref (spu-ram spu) (spu-transfer-address spu))
+                     (ldb (byte 8 8) value))
+               (setf  (spu-transfer-address spu)
+                      (mod (1+ (spu-transfer-address spu)) #x80000))
+               (setf (spu-sound-ram-data-transfer-fifo spu) value)))
        (#x1AA (setf (spu-control spu) value))
        (#x1AC (setf (spu-sound-ram-data-transfer-control spu) value))
-       (#x1AE (setf (spu-status spu) value))
+       (#x1AE
+         (progn
+          (log:debug "Attempting to write 0x~8,'0x to spu-status ~
+                      which is read only.~%"
+                      value)
+          value))
        (#x1B0 (setf (spu-cd-volume-left spu) value))
        (#x1B2 (setf (spu-cd-volume-right spu) value))
        (#x1B4 (setf (spu-external-volume-left spu) value))
