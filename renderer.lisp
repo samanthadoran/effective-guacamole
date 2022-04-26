@@ -29,7 +29,7 @@
      (our-vert-color vert) (our-vert-uv vert))))
 
 (defun-g frag-stage ((color :vec3) (uv :vec2)
-                     &uniform (vram :sampler-2d))
+                                   &uniform (vram :sampler-2d))
   ; TODO(Samantha): This is just here to test textures. REMOVE ME.
   (if (= (aref uv 0) (aref uv 1) 0)
     (v! (/ (aref color 0) 255.0)
@@ -46,11 +46,31 @@
 (declaim ((integer 0 *) *time*))
 
 (defun initialize ()
-  (cepl:repl 1024 512)
-  (setf (surface-title (current-surface (cepl-context)))
-        "Effective Guacamole"))
+  ; Don't redo this if we already have a cepl window.
+  (when (= (length +windows+) 0)
+    (cepl:repl 1024 512)
+    (setf (surface-title (current-surface (cepl-context)))
+          "Effective Guacamole"))
+  (setf *fbo*
+        (make-fbo `(0 ,*fbo-tex*)))
+  (setf *fbo-sampler* (sample *fbo-tex*)))
 
 (defparameter *tex* (make-texture nil :dimensions '(512 1024) :element-type :short))
+
+(defparameter *fbo-tex* (make-texture nil :dimensions '(1024 512) :element-type :rgb8))
+(defparameter *fbo* (sample *fbo-tex*))
+(defparameter *fbo-sample* nil)
+
+(defun-g passthrough-vert ((vert g-pt))
+  (values (v! (pos vert) 1f0) (tex vert)))
+
+(defun-g passthrough-frag ((uv :vec2)
+                           &uniform (sam :sampler-2d))
+  (texture sam uv))
+
+(defpipeline-g passthrough-pipeline ()
+  :vertex (passthrough-vert g-pt)
+  :fragment (passthrough-frag :vec2))
 
 (declaim (ftype (function (gpu))
                 draw))
@@ -59,20 +79,22 @@
     (setf *time* (get-internal-real-time))
     (setf (surface-title (current-surface (cepl-context)))
           (format nil "Effective Guacamole  FPS: ~f" (/ internal-time-units-per-second (- *time* old-time)))))
+
+  ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
+  ; work from a separate file or if the cepl instance is somehow
+  ; automagically global?
+  (step-host)
+  (when (mouse-button (mouse) mouse.left)
+    (format t "Pressed the mouse!~%"))
+  (when (window-manager-quitting +window-manager+)
+    (cepl:quit)
+    (cl-user::quit))
+  (decay-events)
+
   (when (car (gpu-render-list gpu))
-    ; TODO(Samantha): Handle events from skitter... Not sure if that's going to
-    ; work from a separate file or if the cepl instance is somehow
-    ; automagically global?
-    (step-host)
-    (when (mouse-button (mouse) mouse.left)
-      (format t "Pressed the mouse!~%"))
-    (when (window-closing (window 0))
-      (error "Finally.~%"))
-    (decay-events)
-    (clear)
     (when (gpu-updated-vram gpu)
       (free-texture *tex*)
-      (setf *tex* (make-texture (gpu-vram gpu) :element-type :short)))
+      (setf *tex* (make-texture (gpu-vram gpu) :element-type :ushort)))
     (let* ((vao-indices (make-gpu-array
                          (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
                          :element-type :UNSIGNED-INT))
@@ -84,13 +106,32 @@
                            vao
                            :length (gpu-render-list-length gpu)
                            :index-array vao-indices)))
+      (clear)
       (map-g #'some-pipeline buffer-stream
              :offset (v! (gpu-drawing-offset-x gpu)
                          (gpu-drawing-offset-y gpu))
              :vram vram-sampler)
+
+      (with-fbo-bound (*fbo*)
+        (map-g #'some-pipeline buffer-stream
+               :offset (v! (gpu-drawing-offset-x gpu)
+                           (gpu-drawing-offset-y gpu))
+               :vram vram-sampler))
+       (map-g #'passthrough-pipeline
+              (make-buffer-stream
+               (make-gpu-array (list (list (v! -1 1 0) (v! 0 1))
+                                     (list (v! -1 -1 0) (v! 0 0))
+                                     (list (v! 1 -1 0) (v! 1 0))
+                                     (list (v! -1 1 0) (v! 0 1))
+                                     (list (v! 1 -1 0) (v! 1 0))
+                                     (list (v! 1 1 0) (v! 1 1)))
+                               :element-type 'g-pt))
+              :sam *fbo-sample*)
+      (setf *fbo-sample* (sample *fbo-tex*))
+
       (free-buffer-stream buffer-stream)
       (free-gpu-array vao)
       (free-sampler vram-sampler)
-      (free-gpu-array vao-indices))
-    (swap))
+      (free-gpu-array vao-indices)
+      (swap)))
   (values))
