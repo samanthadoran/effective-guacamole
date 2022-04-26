@@ -84,8 +84,6 @@
   ; work from a separate file or if the cepl instance is somehow
   ; automagically global?
   (step-host)
-  (when (mouse-button (mouse) mouse.left)
-    (format t "Pressed the mouse!~%"))
   (when (window-manager-quitting +window-manager+)
     (cepl:quit)
     (cl-user::quit))

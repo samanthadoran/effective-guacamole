@@ -155,7 +155,7 @@
    (make-array '(512 1024)
                ; TODO(Samantha): Should this be u8 or u16?
                :element-type '(unsigned-byte 16)
-               :initial-element #xFFFF)
+               :initial-element #x0000)
    :type (simple-array (unsigned-byte 16) (512 1024)))
   ; TODO(Samantha): Make this a vect for speed
   (render-list (list) :type list)
@@ -471,7 +471,7 @@
                                               (unsigned-byte 32))
                           list)
                 make-textured-vertex))
-(defun make-textured-vertex (position uv color)
+(defun make-textured-vertex (position uv &optional (color #x00))
   ; TODO(Samantha): This is very wrong.
   (list (word-to-position position) uv (word-to-color color)))
 
@@ -519,33 +519,27 @@
           (list* (make-textured-vertex v3 (texture-coordinate-to-word
                                            texture-coordinate3
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v2 (texture-coordinate-to-word
                                            texture-coordinate2-and-texture-page
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v1 (texture-coordinate-to-word
                                            texture-coordinate1-and-palette
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v2 (texture-coordinate-to-word
                                            texture-coordinate2-and-texture-page
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v3 (texture-coordinate-to-word
                                            texture-coordinate3
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v4 (texture-coordinate-to-word
                                            texture-coordinate4
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (gpu-render-list gpu))))
 
   (incf (gpu-render-list-length gpu) 6)
@@ -589,33 +583,27 @@
           (list* (make-textured-vertex v3 (texture-coordinate-to-word
                                            texture-coordinate3
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v2 (texture-coordinate-to-word
                                            texture-coordinate2-and-texture-page
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v1 (texture-coordinate-to-word
                                            texture-coordinate1-and-palette
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v2 (texture-coordinate-to-word
                                            texture-coordinate2-and-texture-page
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v3 (texture-coordinate-to-word
                                            texture-coordinate3
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (make-textured-vertex v4 (texture-coordinate-to-word
                                            texture-coordinate4
                                            texture-page-x-address
-                                           texture-page-y-address)
-                                       #xFF)
+                                           texture-page-y-address))
                  (gpu-render-list gpu))))
   (incf (gpu-render-list-length gpu) 6)
   (log:debug "GP0(#x2D): render-opaque-raw-textured-quadrilateral ~
@@ -638,14 +626,39 @@
   (declare (ignore color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
-  (setf (gpu-render-list gpu)
-        (list* (make-vertex v3 #xFF)
-               (make-vertex v2 #xFF)
-               (make-vertex v1 #xFF)
-               (make-vertex v2 #xFF)
-               (make-vertex v3 #xFF)
-               (make-vertex v4 #xFF)
-               (gpu-render-list gpu)))
+                 (let* ((palette (ldb (byte 16 16) texture-coordinate1-and-palette))
+                        (clut-address-x (* 16 2 (ldb (byte 6 0) palette)))
+                        (clut-address-y (ldb (byte 9 6) palette))
+                        (texture-page (ldb (byte 16 16) texture-coordinate2-and-texture-page))
+                        (texture-page-x-address (* 64 2 (ldb (byte 4 0) texture-page)))
+                        (texture-page-y-address (* 256 (ldb (byte 1 4) texture-page))))
+                   (declare (ignore clut-address-x clut-address-y))
+                   (setf (gpu-render-list gpu)
+                         (list* (make-textured-vertex v3 (texture-coordinate-to-word
+                                                          texture-coordinate3
+                                                          texture-page-x-address
+                                                          texture-page-y-address))
+                                (make-textured-vertex v2 (texture-coordinate-to-word
+                                                          texture-coordinate2-and-texture-page
+                                                          texture-page-x-address
+                                                          texture-page-y-address))
+                                (make-textured-vertex v1 (texture-coordinate-to-word
+                                                          texture-coordinate1-and-palette
+                                                          texture-page-x-address
+                                                          texture-page-y-address))
+                                (make-textured-vertex v2 (texture-coordinate-to-word
+                                                          texture-coordinate2-and-texture-page
+                                                          texture-page-x-address
+                                                          texture-page-y-address))
+                                (make-textured-vertex v3 (texture-coordinate-to-word
+                                                          texture-coordinate3
+                                                          texture-page-x-address
+                                                          texture-page-y-address))
+                                (make-textured-vertex v4 (texture-coordinate-to-word
+                                                          texture-coordinate4
+                                                          texture-page-x-address
+                                                          texture-page-y-address))
+                                (gpu-render-list gpu))))
   (incf (gpu-render-list-length gpu) 6)
   (log:debug "GP0(#x2F): render-semi-transparent-raw-textured-quadrilateral ~
              is not fully implemented!~%")
