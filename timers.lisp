@@ -122,7 +122,7 @@
                    ; Dotclock
                    ; TODO(Samantha): Change this to the proper source
                    (1 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers))
+                            (lambda () (ceiling (* 1.57142857143 (funcall (timers-system-clock-callback timers))))))
                       (setf (mode-cycles-till-value mode)
                             cycles-till-value))
                    ; System clock
@@ -133,7 +133,7 @@
                    ; Dot clock
                    ; TODO(Samantha): Change this to the proper source
                    (3 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers))
+                            (lambda () (ceiling (* 1.57142857143 (funcall (timers-system-clock-callback timers))))))
                       (setf (mode-cycles-till-value mode)
                             cycles-till-value))))
            (:timer1
@@ -146,9 +146,12 @@
                    ; Hblank
                    ; TODO(Samantha): Change this to the proper source
                    (1 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers))
+                            (lambda () (ceiling (/ (* 1.57142857143 (funcall (timers-system-clock-callback timers))) 3406))))
                       (setf (mode-cycles-till-value mode)
-                            cycles-till-value))
+                            (lambda (value)
+                                    (ldb
+                                     (byte 62 0)
+                                     (* 3406 (funcall cycles-till-value value))))))
                    ; System clock
                    (2 (setf (mode-clock-source-callback mode)
                             (timers-system-clock-callback timers))
@@ -157,9 +160,12 @@
                    ; Hblank
                    ; TODO(Samantha): Change this to the proper source
                    (3 (setf (mode-clock-source-callback mode)
-                            (timers-system-clock-callback timers))
+                            (lambda () (ceiling (/ (* 1.57142857143 (funcall (timers-system-clock-callback timers))) 3406))))
                       (setf (mode-cycles-till-value mode)
-                            cycles-till-value))))
+                            (lambda (value)
+                                    (ldb
+                                     (byte 62 0)
+                                     (* 3406 (funcall cycles-till-value value))))))))
            (:timer2
             (ecase source
                    ; System clock
