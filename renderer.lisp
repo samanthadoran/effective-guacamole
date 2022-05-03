@@ -52,14 +52,10 @@
     (setf (surface-title (current-surface (cepl-context)))
           "Effective Guacamole"))
   (setf *fbo*
-        (make-fbo `(0 ,*fbo-tex*)))
-  (setf *fbo-sampler* (sample *fbo-tex*)))
+    (make-fbo '(0 :dimensions (512 1024) :element-type :rgba8) '(:d :dimensions (512 1024)))))
 
-(defparameter *tex* (make-texture nil :dimensions '(512 1024) :element-type :short))
-
-(defparameter *fbo-tex* (make-texture nil :dimensions '(1024 512) :element-type :rgb8))
-(defparameter *fbo* (sample *fbo-tex*))
-(defparameter *fbo-sample* nil)
+(defparameter *tex* (make-texture nil :dimensions '(512 1024) :element-type :ushort))
+(defparameter *fbo* nil)
 
 (defun-g passthrough-vert ((vert g-pt))
   (values (v! (pos vert) 1f0) (tex vert)))
@@ -90,9 +86,8 @@
   (decay-events)
 
   (when (car (gpu-render-list gpu))
-    (when (gpu-updated-vram gpu)
-      (free-texture *tex*)
-      (setf *tex* (make-texture (gpu-vram gpu) :element-type :ushort)))
+    (free *tex*)
+    (setf *tex* (make-texture (gpu-vram gpu) :element-type :ushort))
     (let* ((vao-indices (make-gpu-array
                          (loop for i from 0 to (- (gpu-render-list-length gpu) 1) collect i)
                          :element-type :UNSIGNED-INT))
@@ -109,24 +104,16 @@
              :offset (v! (gpu-drawing-offset-x gpu)
                          (gpu-drawing-offset-y gpu))
              :vram vram-sampler)
-
-      (with-fbo-bound (*fbo*)
-        (map-g #'some-pipeline buffer-stream
-               :offset (v! (gpu-drawing-offset-x gpu)
-                           (gpu-drawing-offset-y gpu))
-               :vram vram-sampler))
-       (map-g #'passthrough-pipeline
-              (make-buffer-stream
-               (make-gpu-array (list (list (v! -1 1 0) (v! 0 1))
-                                     (list (v! -1 -1 0) (v! 0 0))
-                                     (list (v! 1 -1 0) (v! 1 0))
-                                     (list (v! -1 1 0) (v! 0 1))
-                                     (list (v! 1 -1 0) (v! 1 0))
-                                     (list (v! 1 1 0) (v! 1 1)))
-                               :element-type 'g-pt))
-              :sam *fbo-sample*)
-      (setf *fbo-sample* (sample *fbo-tex*))
-
+     (map-g #'passthrough-pipeline
+            (make-buffer-stream
+             (make-gpu-array (list (list (v! -1 1 0) (v! 0 0))
+                                   (list (v! -1 -1 0) (v! 0 1))
+                                   (list (v! 1 -1 0) (v! 1 1))
+                                   (list (v! -1 1 0) (v! 0 0))
+                                   (list (v! 1 -1 0) (v! 1 1))
+                                   (list (v! 1 1 0) (v! 1 0)))
+                             :element-type 'g-pt))
+            :sam vram-sampler)
       (free-buffer-stream buffer-stream)
       (free-gpu-array vao)
       (free-sampler vram-sampler)

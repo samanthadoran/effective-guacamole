@@ -206,8 +206,9 @@
                               (ceiling
                                (joypads-transmission-timer joypads))))))))
       (setf (joypads-write-fifo joypads) (list value))
-      (when (= value #x81)
-        (error "Mem card?~%")))
+      ; (when (= value #x81)
+      ;   (error "Mem card?~%"))
+      )
     (#x8 (setf (joypads-joy-mode joypads)
                value))
     (#xA (setf (joypads-joy-ctrl joypads)
