@@ -9,3 +9,5 @@ There's literally less a whole boot logo here.
 ![Such texture, much BIOS.](screenshots/bios.png)
 
 ![Painstakingly accurate representation of the memory card manager.](screenshots/memcard.png)
+
+![This is how the cdrom player looks, right?](screenshots/cdrom.png)
