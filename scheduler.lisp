@@ -25,12 +25,13 @@
    itself."
   (master-clock 0 :type (unsigned-byte 62))
   (components
-   (make-array '(3)
+   (make-array '(4)
                :element-type 'component
                :initial-contents (vector (make-component)
                                          (make-component)
+                                         (make-component)
                                          (make-component)))
-   :type (simple-array component (3))))
+   :type (simple-array component (4))))
 
 (declaim (ftype (function (scheduler keyword (unsigned-byte 62)))))
 (defun register-sync-event (scheduler component epoch-of-next-sync)
@@ -50,6 +51,10 @@
          (:joypads (setf (component-epoch-of-next-sync
                           (aref (scheduler-components scheduler)
                                 2))
+                         epoch-of-next-sync))
+         (:cdrom (setf (component-epoch-of-next-sync
+                          (aref (scheduler-components scheduler)
+                                3))
                          epoch-of-next-sync))))
 
 (declaim (ftype (function (scheduler (unsigned-byte 62)))

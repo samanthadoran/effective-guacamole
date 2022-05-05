@@ -60,7 +60,13 @@
          (aref (psx-scheduler:scheduler-components (psx-scheduler psx)) 2))
         (lambda (epoch)
                 (psx-joypads:sync (psx-joypads psx) epoch)))
+  (setf (psx-scheduler:component-sync-callback
+         (aref (psx-scheduler:scheduler-components (psx-scheduler psx)) 3))
+        (lambda (epoch)
+                (psx-cdrom:sync (psx-cdrom psx) epoch)))
   (setf (psx-timers::timers-system-clock-callback (psx-timers psx))
+        (lambda () (psx-scheduler:scheduler-master-clock (psx-scheduler psx))))
+  (setf (psx-cdrom::cdrom-system-clock-callback (psx-cdrom psx))
         (lambda () (psx-scheduler:scheduler-master-clock (psx-scheduler psx))))
   (psx-timers:init-timers (psx-timers psx))
   (values))

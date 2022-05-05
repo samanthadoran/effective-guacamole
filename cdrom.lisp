@@ -3,9 +3,10 @@
   (:use :cl)
   (:import-from
    :fset
-   :empty-seq :wb-seq :empty? :size :seq :less-first :with-last)
+   :empty-seq :concat :wb-seq :empty? :size :seq :less-first :with-last :do-seq)
   (:export #:cdrom #:make-cdrom #:read-cdrom-registers #:write-cdrom-registers
-           #:cdrom-exception-callback #:cdrom-image))
+           #:cdrom-exception-callback #:cdrom-image #:cdrom-sync-callback #:sync
+           #:cdrom-system-clock-callback))
 
 (in-package :psx-cdrom)
 
@@ -28,6 +29,14 @@
   (command-busy nil :type boolean)
 
   ;; TODO(Samantha): Specialize on wb-seq?
+  (system-clock-callback
+   (lambda () 0)
+   :type (function () (unsigned-byte 62)))
+  (sync-callback
+   (lambda (clock) (declare (ignore clock)))
+   :type (function ((unsigned-byte 62))))
+  (actions (empty-seq) :type wb-seq)
+  (secondary-actions (empty-seq) :type wb-seq)
   (remaining-interrupts (empty-seq) :type wb-seq)
   (data-fifo (empty-seq) :type wb-seq)
   (xa-adpcm-fifo (empty-seq) :type wb-seq)
@@ -95,8 +104,8 @@
        0
        0)
      4)
-   (ash 1 1)
-   (ash 1 5)))
+   (ash 0 1)
+   (ash 0 5)))
 
 (declaim (ftype (function (cdrom (unsigned-byte 8)))
                 write-interrupt-flag))
@@ -133,34 +142,83 @@
 (declaim (ftype (function (cdrom (unsigned-byte 8)))
                 write-command))
 (defun write-command (cdrom command)
-  ; TODO(Samantha): Find a place for delay timing of the parameter fifo
-  ; transferring to the controller. The IRQ should _not_ fire immediately.
   (when (cdrom-command-busy cdrom)
     (error "Trying to send a command while the busy flag is up is not good!"))
 
-  (unless (empty? (cdrom-remaining-interrupts cdrom))
-    (error "Remaining interrupts should be false because command isn't busy."))
+  ; (unless (empty? (cdrom-remaining-interrupts cdrom))
+  ;   (error "Remaining interrupts should be false because command isn't busy."))
 
   (ecase command
          ;; GetStat
          (#x1
-           (setf (cdrom-response-fifo cdrom)
-                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
-
-           (raise-cdrom-interrupt cdrom #x3))
+           (setf (cdrom-actions cdrom)
+                 (with-last (cdrom-actions cdrom)
+                   (lambda ()
+                           (format t "Get stat-action~%")
+                           (setf (cdrom-response-fifo cdrom)
+                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
+                           (raise-cdrom-interrupt cdrom #x3)
+                           (setf (cdrom-parameter-fifo cdrom)
+                                 (empty-seq))))))
+         (#x8
+           (setf (cdrom-actions cdrom)
+                 (with-last (cdrom-actions cdrom)
+                   (lambda ()
+                           (format t "Stop action~%")
+                           (setf (cdrom-response-fifo cdrom)
+                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
+                           (raise-cdrom-interrupt cdrom #x3)
+                           (setf (cdrom-parameter-fifo cdrom)
+                                 (empty-seq))
+                           (setf (cdrom-command-busy cdrom) t)
+                           ; 2 responses....???
+                           (setf (cdrom-secondary-actions cdrom)
+                                 (with-last (cdrom-secondary-actions cdrom)
+                                   (lambda ()
+                                           (setf (cdrom-response-fifo cdrom)
+                                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
+                                           (raise-cdrom-interrupt cdrom #x3)
+                                           (setf (cdrom-command-busy cdrom) nil))))))))
+         (#x1A
+           (setf (cdrom-actions cdrom)
+                 (with-last (cdrom-actions cdrom)
+                   (lambda ()
+                           (format t "GetID action~%")
+                           (setf (cdrom-response-fifo cdrom)
+                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
+                           (raise-cdrom-interrupt cdrom #x3)
+                           (setf (cdrom-parameter-fifo cdrom)
+                                 (empty-seq))
+                           (setf (cdrom-command-busy cdrom) t)
+                           ; 2 responses....???
+                           (setf (cdrom-secondary-actions cdrom)
+                                 (with-last (cdrom-secondary-actions cdrom)
+                                   (lambda ()
+                                           (format t "GetID second~%")
+                                           (setf (cdrom-response-fifo cdrom)
+                                                 (concat (cdrom-response-fifo cdrom)
+                                                   ; (seq #x08 #x40 #x00 #x00 #x00 #x00 #x00 #x00)
+                                                   (seq #x02 #x00 #x20 #x00 #x53 #x43 #x45 #x45)
+                                                         ))
+                                           (raise-cdrom-interrupt cdrom #x5)
+                                           (setf (cdrom-command-busy cdrom) nil))))))))
          ;; Tests with subfunctions
          (#x19
            (ecase (fset:first (cdrom-parameter-fifo cdrom))
                   ;; cdrom bios version
                   (#x20
-                    (setf (cdrom-response-fifo cdrom)
-                          (seq #x97 #x01 #x10 #xC2))
-
-                    (raise-cdrom-interrupt cdrom #x3)))))
-
-  ; TODO(Samantha): This isn't really how this works. Transmission takes time.
-  (setf (cdrom-parameter-fifo cdrom)
-        (empty-seq))
+                    (setf (cdrom-actions cdrom)
+                          (with-last (cdrom-actions cdrom)
+                            (lambda ()
+                                    (format t "test subfunction-action~%")
+                                    (setf (cdrom-response-fifo cdrom)
+                                          (seq #x97 #x01 #x10 #xC2))
+                                    (raise-cdrom-interrupt cdrom #x3)
+                                    (setf (cdrom-parameter-fifo cdrom)
+                                          (empty-seq)))))))))
+  (funcall (cdrom-sync-callback cdrom)
+           (+ (funcall (cdrom-system-clock-callback cdrom))
+              4000))
   (values))
 
 (declaim (ftype (function (cdrom (unsigned-byte 2))
@@ -193,3 +251,19 @@
          (3 (ecase (cdrom-index cdrom)
                    (1 (write-interrupt-flag cdrom value)))))
   value)
+
+(declaim (ftype (function (cdrom (unsigned-byte 62)))
+                sync))
+(defun sync (cdrom clock)
+  (declare (ignore clock))
+  (do-seq (action (cdrom-actions cdrom))
+    (funcall action))
+  (unless (empty? (cdrom-secondary-actions cdrom))
+    (funcall (cdrom-sync-callback cdrom)
+             (+ (funcall (cdrom-system-clock-callback cdrom))
+                4000)))
+  (setf (cdrom-actions cdrom)
+        (cdrom-secondary-actions cdrom))
+  (setf (cdrom-secondary-actions cdrom)
+        (empty-seq))
+  (values))

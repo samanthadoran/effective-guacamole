@@ -306,6 +306,11 @@
                                                       :timers
                                                       clock)))
   (setf
+   (psx-cdrom:cdrom-sync-callback (psx-cdrom psx))
+   (lambda (clock) (psx-scheduler:register-sync-event (psx-scheduler psx)
+                                                      :cdrom
+                                                      clock)))
+  (setf
    (psx-timers:timers-exception-callback (psx-timers psx))
    (lambda (keyword)
            (psx-irq::raise-interrupt (psx-irq psx) keyword)
