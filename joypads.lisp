@@ -164,9 +164,9 @@
             (setf (joypads-received-from-controller joypads)
                   #xFF))
            (4 (setf result (joypad-status-to-word
-               (joypads-joy-stat joypads)
-               (aref (the (simple-array controller) (joypads-controllers joypads))
-                     (joypad-control-desired-slot (joypads-joy-ctrl joypads))))))
+                            (joypads-joy-stat joypads)
+                            (aref (the (simple-array controller) (joypads-controllers joypads))
+                                  (joypad-control-desired-slot (joypads-joy-ctrl joypads))))))
            (8 (setf result (joypads-joy-mode joypads)))
            (#xA (setf result (joypad-control-to-word (joypads-joy-ctrl joypads))))
            (#xE (setf result (joypads-joy-baud joypads))))
@@ -205,10 +205,8 @@
                          (ldb (byte 32 0)
                               (ceiling
                                (joypads-transmission-timer joypads))))))))
-      (setf (joypads-write-fifo joypads) (list value))
-      ; (when (= value #x81)
-      ;   (error "Mem card?~%"))
-      )
+      (setf (joypads-write-fifo joypads) (list value)))
+
     (#x8 (setf (joypads-joy-mode joypads)
                value))
     (#xA (setf (joypads-joy-ctrl joypads)

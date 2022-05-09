@@ -148,9 +148,9 @@
                 invalidate-cache))
 (defun invalidate-cache (cpu)
   (let* ((instruction-address (cpu-current-program-counter cpu))
-        (cache-line (aref (cpu-cache-lines cpu)
-                          (ldb (byte 8 4) instruction-address)))
-        (index (ldb (byte 2 2) instruction-address)))
+         (cache-line (aref (cpu-cache-lines cpu)
+                           (ldb (byte 8 4) instruction-address)))
+         (index (ldb (byte 2 2) instruction-address)))
     (if (psx-cache-control:cache-control-scratchpad-enable-1 (cpu-cache-control cpu))
       (loop for i from 0 to 3
         ; TODO(Samantha): Support something like this because reading from

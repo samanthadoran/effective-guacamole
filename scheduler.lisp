@@ -55,7 +55,7 @@
          (:cdrom (setf (component-epoch-of-next-sync
                           (aref (scheduler-components scheduler)
                                 3))
-                         epoch-of-next-sync))))
+                       epoch-of-next-sync))))
 
 (declaim (ftype (function (scheduler (unsigned-byte 62)))
                 sync-components))

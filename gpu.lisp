@@ -356,9 +356,9 @@
                 render-opaque-monochromatic-dot))
 (defun render-opaque-monochromatic-dot (gpu color v1)
   (let* ((left (ldb (byte 16 0) v1))
-        (right (1+ left))
-        (top (ldb (byte 16 16) v1))
-        (bottom (1+ top)))
+         (right (1+ left))
+         (top (ldb (byte 16 16) v1))
+         (bottom (1+ top)))
     (render-opaque-shaded-triangle gpu
                                    color (logior left (ash top 16))
                                    color (logior right (ash top 16))
@@ -626,39 +626,39 @@
   (declare (ignore color1 texture-coordinate1-and-palette
                    texture-coordinate2-and-texture-page texture-coordinate3
                    texture-coordinate4))
-                 (let* ((palette (ldb (byte 16 16) texture-coordinate1-and-palette))
-                        (clut-address-x (* 16 2 (ldb (byte 6 0) palette)))
-                        (clut-address-y (ldb (byte 9 6) palette))
-                        (texture-page (ldb (byte 16 16) texture-coordinate2-and-texture-page))
-                        (texture-page-x-address (* 64 2 (ldb (byte 4 0) texture-page)))
-                        (texture-page-y-address (* 256 (ldb (byte 1 4) texture-page))))
-                   (declare (ignore clut-address-x clut-address-y))
-                   (setf (gpu-render-list gpu)
-                         (list* (make-textured-vertex v3 (texture-coordinate-to-word
-                                                          texture-coordinate3
-                                                          texture-page-x-address
-                                                          texture-page-y-address))
-                                (make-textured-vertex v2 (texture-coordinate-to-word
-                                                          texture-coordinate2-and-texture-page
-                                                          texture-page-x-address
-                                                          texture-page-y-address))
-                                (make-textured-vertex v1 (texture-coordinate-to-word
-                                                          texture-coordinate1-and-palette
-                                                          texture-page-x-address
-                                                          texture-page-y-address))
-                                (make-textured-vertex v2 (texture-coordinate-to-word
-                                                          texture-coordinate2-and-texture-page
-                                                          texture-page-x-address
-                                                          texture-page-y-address))
-                                (make-textured-vertex v3 (texture-coordinate-to-word
-                                                          texture-coordinate3
-                                                          texture-page-x-address
-                                                          texture-page-y-address))
-                                (make-textured-vertex v4 (texture-coordinate-to-word
-                                                          texture-coordinate4
-                                                          texture-page-x-address
-                                                          texture-page-y-address))
-                                (gpu-render-list gpu))))
+  (let* ((palette (ldb (byte 16 16) texture-coordinate1-and-palette))
+         (clut-address-x (* 16 2 (ldb (byte 6 0) palette)))
+         (clut-address-y (ldb (byte 9 6) palette))
+         (texture-page (ldb (byte 16 16) texture-coordinate2-and-texture-page))
+         (texture-page-x-address (* 64 2 (ldb (byte 4 0) texture-page)))
+         (texture-page-y-address (* 256 (ldb (byte 1 4) texture-page))))
+    (declare (ignore clut-address-x clut-address-y))
+    (setf (gpu-render-list gpu)
+          (list* (make-textured-vertex v3 (texture-coordinate-to-word
+                                           texture-coordinate3
+                                           texture-page-x-address
+                                           texture-page-y-address))
+                 (make-textured-vertex v2 (texture-coordinate-to-word
+                                           texture-coordinate2-and-texture-page
+                                           texture-page-x-address
+                                           texture-page-y-address))
+                 (make-textured-vertex v1 (texture-coordinate-to-word
+                                           texture-coordinate1-and-palette
+                                           texture-page-x-address
+                                           texture-page-y-address))
+                 (make-textured-vertex v2 (texture-coordinate-to-word
+                                           texture-coordinate2-and-texture-page
+                                           texture-page-x-address
+                                           texture-page-y-address))
+                 (make-textured-vertex v3 (texture-coordinate-to-word
+                                           texture-coordinate3
+                                           texture-page-x-address
+                                           texture-page-y-address))
+                 (make-textured-vertex v4 (texture-coordinate-to-word
+                                           texture-coordinate4
+                                           texture-page-x-address
+                                           texture-page-y-address))
+                 (gpu-render-list gpu))))
   (incf (gpu-render-list-length gpu) 6)
   (log:debug "GP0(#x2F): render-semi-transparent-raw-textured-quadrilateral ~
              is not fully implemented!~%")
@@ -1130,7 +1130,7 @@
     (when (and (line-in-vblank? gpu (gpu-current-scanline gpu))
                (or (not (line-in-vblank? gpu previous-scanline))
                    (< (number-of-lines-in-vblank gpu)
-                       (the (unsigned-byte 62) elapsed-lines))))
+                      (the (unsigned-byte 62) elapsed-lines))))
       (vsync gpu)))
 
   (values))
