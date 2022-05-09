@@ -12,6 +12,13 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
+(defstruct cdrom-interrupt
+  "Holds a queueable cdrom interrupt code and the associated action."
+  (code 0 :type (integer 0 16))
+  (action
+   (lambda () (values))
+   :type (function ())))
+
 (defstruct cdrom
   "Encompasses all of the internal state for the cdrom controller, disc, and
   any other information."
@@ -35,9 +42,8 @@
   (sync-callback
    (lambda (clock) (declare (ignore clock)))
    :type (function ((unsigned-byte 62))))
-  (actions (empty-seq) :type wb-seq)
-  (secondary-actions (empty-seq) :type wb-seq)
   (remaining-interrupts (empty-seq) :type wb-seq)
+  (current-interrupt 0 :type (integer 0 16))
   (data-fifo (empty-seq) :type wb-seq)
   (xa-adpcm-fifo (empty-seq) :type wb-seq)
   (response-fifo (empty-seq) :type wb-seq)
@@ -58,15 +64,15 @@
    (ash (if (empty? (cdrom-data-fifo cdrom)) 0 1) 6)
    (ash (if (cdrom-command-busy cdrom) 1 0) 7)))
 
- (declaim (ftype (function (cdrom (unsigned-byte 8)))
-                 write-status-register))
- (defun write-status-register (cdrom value)
-   "Handle writes to the status register of the CDROM. All fields in this
+(declaim (ftype (function (cdrom (unsigned-byte 8)))
+                write-status-register))
+(defun write-status-register (cdrom value)
+  "Handle writes to the status register of the CDROM. All fields in this
    register are immuatable, other than the index field. As such, only
    bits [0, 2] matter as input to this function."
-   (setf (cdrom-index cdrom)
-         (ldb (byte 2 0) value))
-   (values))
+  (setf (cdrom-index cdrom)
+        (ldb (byte 2 0) value))
+  (values))
 
 (declaim (ftype (function (cdrom)
                           (unsigned-byte 8))
@@ -107,6 +113,15 @@
    (ash 0 1)
    (ash 0 5)))
 
+(declaim (ftype (function (cdrom cdrom-interrupt))
+                process-interrupt))
+(defun process-interrupt (cdrom interrupt)
+  (funcall (cdrom-exception-callback cdrom))
+  (funcall (cdrom-interrupt-action interrupt))
+  (setf (cdrom-current-interrupt cdrom)
+        (cdrom-interrupt-code interrupt))
+  (values))
+
 (declaim (ftype (function (cdrom (unsigned-byte 8)))
                 write-interrupt-flag))
 (defun write-interrupt-flag (cdrom value)
@@ -118,7 +133,8 @@
       (error "We don't handle not clearing all of the irq bits."))
     ; TODO(Samantha): Handle interrupts past int 5.
     (setf (cdrom-remaining-interrupts cdrom)
-          (less-first (cdrom-remaining-interrupts cdrom))))
+          (less-first (cdrom-remaining-interrupts cdrom)))
+    (setf (cdrom-current-interrupt cdrom) 0))
 
   (when (ldb-test (byte 1 6) value)
     (setf (cdrom-parameter-fifo cdrom)
@@ -126,99 +142,149 @@
 
   (values))
 
-(declaim (ftype (function (cdrom (integer 0 16)))
-                raise-cdrom-interrupt))
-(defun raise-cdrom-interrupt (cdrom interrupt)
-  "Conditionally adds a pending interrupt to the queue depending on the mask."
-  ; TODO(Samantha): We can only mask interrupts [1, 5]? Verify.
-  (when (or (ldb-test (byte 1 (1- interrupt)) (cdrom-interrupt-enable cdrom))
-            (> interrupt 5))
-    ; TODO(Samantha): This needs to move to a cdrom-tick.
-    (funcall (cdrom-exception-callback cdrom))
+(declaim (ftype (function (cdrom cdrom-interrupt))
+                queue-cdrom-interrupt))
+(defun queue-cdrom-interrupt (cdrom interrupt)
+  "Conditionally add a new interrupt to the current pending interrupts and maybe
+   raise it if there are no other pending interrupts."
+  ; We can only raise or add this interrupt if we aren't masking it out.
+  ; FIXME(Samantha): Right now, psx is writing 0b11000 to interrupt-enable...
+  ; I'm not sure why it's doing this and then sending a readtoc... But, it's done.
+  (when (or (ldb-test (byte 1 (1- (cdrom-interrupt-code interrupt))) (cdrom-interrupt-enable cdrom))
+            (> (cdrom-interrupt-code interrupt) 5)
+            t)
+    ; Add it to the pending interrupts so it can be acknowledged.
     (setf (cdrom-remaining-interrupts cdrom)
           (with-last (cdrom-remaining-interrupts cdrom) interrupt)))
   (values))
 
+; TODO(Samantha): Separate handling of command. Writing the command should
+; technically take some amount of time.
 (declaim (ftype (function (cdrom (unsigned-byte 8)))
                 write-command))
 (defun write-command (cdrom command)
   (when (cdrom-command-busy cdrom)
     (error "Trying to send a command while the busy flag is up is not good!"))
 
+  ; TODO(Samantha): This assumption isn't correct. The busy flag only has to
+  ; deal with command and parameter transmission. (I think.)
   ; (unless (empty? (cdrom-remaining-interrupts cdrom))
   ;   (error "Remaining interrupts should be false because command isn't busy."))
+  ; Capture the current time to aid in scheduling interrupts.
+  (let ((epoch (funcall (cdrom-system-clock-callback cdrom))))
+    (ecase command
+           ; GetStat
+           (#x1
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x3
+               :action (lambda ()
+                               (log:info "Getstat action~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))))))
+           ; Stop
+           (#x8
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x3
+               :action (lambda ()
+                               (log:info "Stop action~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))
+                               (queue-cdrom-interrupt
+                                cdrom
+                                (make-cdrom-interrupt
+                                 :code #x3
+                                 :action (lambda ()
+                                                 (log:info "Stop action 2~%")
+                                                 (setf (cdrom-response-fifo cdrom)
+                                                       (with-last (cdrom-response-fifo cdrom)
+                                                         (get-stat cdrom))))))
 
-  (ecase command
-         ;; GetStat
-         (#x1
-           (setf (cdrom-actions cdrom)
-                 (with-last (cdrom-actions cdrom)
-                   (lambda ()
-                           (format t "Get stat-action~%")
-                           (setf (cdrom-response-fifo cdrom)
-                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
-                           (raise-cdrom-interrupt cdrom #x3)
-                           (setf (cdrom-parameter-fifo cdrom)
-                                 (empty-seq))))))
-         (#x8
-           (setf (cdrom-actions cdrom)
-                 (with-last (cdrom-actions cdrom)
-                   (lambda ()
-                           (format t "Stop action~%")
-                           (setf (cdrom-response-fifo cdrom)
-                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
-                           (raise-cdrom-interrupt cdrom #x3)
-                           (setf (cdrom-parameter-fifo cdrom)
-                                 (empty-seq))
-                           (setf (cdrom-command-busy cdrom) t)
-                           ; 2 responses....???
-                           (setf (cdrom-secondary-actions cdrom)
-                                 (with-last (cdrom-secondary-actions cdrom)
-                                   (lambda ()
-                                           (setf (cdrom-response-fifo cdrom)
-                                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
-                                           (raise-cdrom-interrupt cdrom #x3)
-                                           (setf (cdrom-command-busy cdrom) nil))))))))
-         (#x1A
-           (setf (cdrom-actions cdrom)
-                 (with-last (cdrom-actions cdrom)
-                   (lambda ()
-                           (format t "GetID action~%")
-                           (setf (cdrom-response-fifo cdrom)
-                                 (with-last (cdrom-response-fifo cdrom) (get-stat cdrom)))
-                           (raise-cdrom-interrupt cdrom #x3)
-                           (setf (cdrom-parameter-fifo cdrom)
-                                 (empty-seq))
-                           (setf (cdrom-command-busy cdrom) t)
-                           ; 2 responses....???
-                           (setf (cdrom-secondary-actions cdrom)
-                                 (with-last (cdrom-secondary-actions cdrom)
-                                   (lambda ()
-                                           (format t "GetID second~%")
-                                           (setf (cdrom-response-fifo cdrom)
-                                                 (concat (cdrom-response-fifo cdrom)
-                                                   ; (seq #x08 #x40 #x00 #x00 #x00 #x00 #x00 #x00)
-                                                   (seq #x02 #x00 #x20 #x00 #x53 #x43 #x45 #x45)
-                                                         ))
-                                           (raise-cdrom-interrupt cdrom #x5)
-                                           (setf (cdrom-command-busy cdrom) nil))))))))
-         ;; Tests with subfunctions
-         (#x19
-           (ecase (fset:first (cdrom-parameter-fifo cdrom))
-                  ;; cdrom bios version
-                  (#x20
-                    (setf (cdrom-actions cdrom)
-                          (with-last (cdrom-actions cdrom)
-                            (lambda ()
-                                    (format t "test subfunction-action~%")
-                                    (setf (cdrom-response-fifo cdrom)
-                                          (seq #x97 #x01 #x10 #xC2))
-                                    (raise-cdrom-interrupt cdrom #x3)
-                                    (setf (cdrom-parameter-fifo cdrom)
-                                          (empty-seq)))))))))
+                               ; Sync the cdrom for the next interrupt once
+                               ; enough time has passed.
+                               (let ((current-clock (funcall cdrom-system-clock-callback cdrom)))
+                                 (funcall (cdrom-sync-callback cdrom)
+                                          (+ current-clock
+                                             (- (+ epoch (* 4000 2))
+                                                current-clock))))))))
+           ; GetID
+           (#x1A
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x3
+               :action (lambda ()
+                               (log:info "GetID action~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))
+                               (queue-cdrom-interrupt
+                                cdrom
+                                (make-cdrom-interrupt
+                                 :code #x2
+                                 :action (lambda ()
+                                                 (log:info "GetID action 2~%")
+                                                 (setf (cdrom-response-fifo cdrom)
+                                                       (concat (cdrom-response-fifo cdrom)
+                                                               (seq #x02 #x00 #x20 #x00 #x53 #x43 #x45 #x45))))))
+
+                               ; Sync the cdrom for the next interrupt once
+                               ; enough time has passed.
+                               (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
+                                 (funcall (cdrom-sync-callback cdrom)
+                                          (+ current-clock
+                                             (- (+ epoch (* 5000 2))
+                                                current-clock))))))))
+           ; ReadTOC
+           (#x1E
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x3
+               :action (lambda ()
+                               (log:info "ReadTOC action~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))
+                               (queue-cdrom-interrupt
+                                cdrom
+                                (make-cdrom-interrupt
+                                 :code #x2
+                                 :action (lambda ()
+                                                 (log:info "ReadTOC action 2~%")
+                                                 (setf (cdrom-response-fifo cdrom)
+                                                       (with-last (cdrom-response-fifo cdrom)
+                                                         (get-stat cdrom))))))
+                               ; Sync the cdrom for the next interrupt once
+                               ; enough time has passed.
+                               (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
+                                 (funcall (cdrom-sync-callback cdrom)
+                                          (+ current-clock
+                                             (- (+ epoch 4000 400000)
+                                                current-clock))))))))
+           ; Subfunctions
+           (#x19
+             (ecase (fset:first (cdrom-parameter-fifo cdrom))
+                    ;; cdrom bios version
+                    (#x20
+                      (queue-cdrom-interrupt
+                       cdrom
+                       (make-cdrom-interrupt
+                        :code #x3
+                        :action (lambda ()
+                                        (log:info "test subfunction-action~%")
+                                        (setf (cdrom-response-fifo cdrom)
+                                              (seq #x97 #x01 #x10 #xC2))))))))))
+
+  (setf (cdrom-parameter-fifo cdrom) (empty-seq))
   (funcall (cdrom-sync-callback cdrom)
            (+ (funcall (cdrom-system-clock-callback cdrom))
-              4000))
+              8000))
   (values))
 
 (declaim (ftype (function (cdrom (unsigned-byte 2))
@@ -231,9 +297,9 @@
                    (1 (read-response-fifo cdrom))))
          (3 (ecase (cdrom-index cdrom)
                    (0 (cdrom-interrupt-enable cdrom))
-                   (1 (fset:first (cdrom-remaining-interrupts cdrom)))
+                   (1 (cdrom-current-interrupt cdrom))
                    (2 (cdrom-interrupt-enable cdrom))
-                   (3 (fset:first (cdrom-remaining-interrupts cdrom)))))))
+                   (3 (cdrom-current-interrupt cdrom))))))
 
 (declaim (ftype (function (cdrom (unsigned-byte 2) (unsigned-byte 8))
                           (unsigned-byte 8))
@@ -256,14 +322,7 @@
                 sync))
 (defun sync (cdrom clock)
   (declare (ignore clock))
-  (do-seq (action (cdrom-actions cdrom))
-    (funcall action))
-  (unless (empty? (cdrom-secondary-actions cdrom))
-    (funcall (cdrom-sync-callback cdrom)
-             (+ (funcall (cdrom-system-clock-callback cdrom))
-                4000)))
-  (setf (cdrom-actions cdrom)
-        (cdrom-secondary-actions cdrom))
-  (setf (cdrom-secondary-actions cdrom)
-        (empty-seq))
+  (unless (empty? (cdrom-remaining-interrupts cdrom))
+    (process-interrupt cdrom (fset:first (cdrom-remaining-interrupts cdrom))))
+
   (values))
