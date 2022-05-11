@@ -72,10 +72,10 @@
   (values))
 
 ; TODO(Samantha): Rename this to something more descriptive
-(declaim (ftype (function (pathname) psx) make-console))
-(defun make-console (bios-rom-path)
+; (declaim (ftype (function (pathname) psx) make-console))
+(defun make-console (bios-rom-path &key iso-path)
   (let ((my-psx (make-psx)))
-    (console-on my-psx bios-rom-path)
+    (console-on my-psx bios-rom-path iso-path)
     my-psx))
 
 ; TODO(Samantha): Figure out the type specifier for this.
@@ -112,10 +112,10 @@
 (declaim (ftype (function (pathname &optional pathname)
                           (unsigned-byte 32))
                 setup-and-run))
-(defun setup-and-run (bios-rom-path &optional exe-path)
+(defun setup-and-run (bios-rom-path &key exe-path iso-path)
   (psx-renderer:initialize)
   (psx-input:init-pads)
-  (let ((psx (make-console bios-rom-path)))
+  (let ((psx (make-console bios-rom-path :iso-path iso-path)))
     (loop for cpu-clocks = (step-cpu (psx-cpu psx))
       do (when (exe-should-be-loaded psx exe-path)
            (load-exe psx exe-path))
