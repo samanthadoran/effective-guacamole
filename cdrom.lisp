@@ -255,7 +255,7 @@
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))))))
-           Stop
+           ; Stop
            (#x8
              (queue-cdrom-interrupt
               cdrom
