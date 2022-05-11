@@ -104,16 +104,16 @@
              :offset (v! (gpu-drawing-offset-x gpu)
                          (gpu-drawing-offset-y gpu))
              :vram vram-sampler)
-     (map-g #'passthrough-pipeline
-            (make-buffer-stream
-             (make-gpu-array (list (list (v! -1 1 0) (v! 0 0))
-                                   (list (v! -1 -1 0) (v! 0 1))
-                                   (list (v! 1 -1 0) (v! 1 1))
-                                   (list (v! -1 1 0) (v! 0 0))
-                                   (list (v! 1 -1 0) (v! 1 1))
-                                   (list (v! 1 1 0) (v! 1 0)))
-                             :element-type 'g-pt))
-            :sam vram-sampler)
+      (map-g #'passthrough-pipeline
+             (make-buffer-stream
+              (make-gpu-array (list (list (v! -1 1 0) (v! 0 0))
+                                    (list (v! -1 -1 0) (v! 0 1))
+                                    (list (v! 1 -1 0) (v! 1 1))
+                                    (list (v! -1 1 0) (v! 0 0))
+                                    (list (v! 1 -1 0) (v! 1 1))
+                                    (list (v! 1 1 0) (v! 1 0)))
+                              :element-type 'g-pt))
+             :sam vram-sampler)
      (free-buffer-stream buffer-stream)
      (free-gpu-array vao)
      (free-sampler vram-sampler)
