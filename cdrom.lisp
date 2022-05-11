@@ -12,6 +12,12 @@
 
 (declaim (optimize (speed 3) (safety 1)))
 
+(defstruct cdrom-position
+  "Holds a position on cd specified as minutes:seconds:sectors"
+  (minutes 0 :type (integer 0 74))
+  (seconds 0 :type (integer 0 60))
+  (sector 0 :type (integer 0 75)))
+
 (defstruct cdrom-interrupt
   "Holds a queueable cdrom interrupt code and the associated action."
   (code 0 :type (integer 0 16))
@@ -35,6 +41,8 @@
   (index 0 :type (unsigned-byte 2))
   (command-busy nil :type boolean)
   (seek nil :type boolean)
+  (read nil :type boolean)
+  (position (make-cdrom-position) :type cdrom-position)
 
   ;; TODO(Samantha): Specialize on wb-seq?
   (system-clock-callback
@@ -105,15 +113,36 @@
   ; Shell open?
   (logior
    (ash
-     (if (ldb-test (byte 1 0)
-                   (car
-                    (array-dimensions (cdrom-image cdrom))))
-       0
+     (if (zerop (car (array-dimensions (cdrom-image cdrom))))
+       1
        0)
      4)
    (ash 0 1)
-   (ash 0 5)
+   (ash (if (cdrom-read cdrom) 1 0) 5)
    (ash (if (cdrom-seek cdrom) 1 0) 6)))
+
+(declaim (ftype (function (cdrom-position)
+                          (unsigned-byte 64))
+                position-to-offset))
+(defun position-to-offset (position)
+  "Converts a position into an LBA offset."
+  (+ (* (+ (* 60 (cdrom-position-minutes position))
+           (cdrom-position-seconds position)
+         75))
+     (cdrom-position-sector position)
+     -150))
+
+(declaim (ftype (function (cdrom))
+                readN))
+(defun readN (cdrom)
+  (setf (cdrom-data-fifo cdrom)
+        (fset:convert 'seq
+                      (subseq (cdrom-image cdrom
+                                           (position-to-offset (cdrom-position cdrom))
+                                           (+ (position-to-offset (cdrom-position cdrom))
+                                              ; TODO(Samantha): Move this to a variable called sector size.
+                                              #x930)))))
+  (values))
 
 (declaim (ftype (function (cdrom cdrom-interrupt))
                 process-interrupt))
@@ -140,8 +169,6 @@
     (unless (= (ldb (byte 3 0) value) 7)
       (error "We don't handle not clearing all of the irq bits."))
     ; TODO(Samantha): Handle interrupts past int 5.
-    (setf (cdrom-remaining-interrupts cdrom)
-          (less-first (cdrom-remaining-interrupts cdrom)))
     (setf (cdrom-current-interrupt cdrom) 0))
 
   (when (ldb-test (byte 1 6) value)
@@ -180,113 +207,169 @@
               (make-cdrom-interrupt
                :code #x3
                :action (lambda ()
-                               (log:info "Getstat action~%")
+                               (log:debug "Getstat action~%")
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))))))
            ; Setloc
            (#x2
-             ; TODO(Samantha): Actually perform this action.
-             (log:warn "Setloc is currently not implemented, it's only a stub.")
-             (log:info "Desired location ~A" (cdrom-parameter-fifo cdrom))
+             (setf (cdrom-position cdrom)
+                   (make-cdrom-position :minutes (fset:@ (cdrom-parameter-fifo cdrom) 0)
+                                        :seconds (fset:@ (cdrom-parameter-fifo cdrom) 1)
+                                        :sector (fset:@ (cdrom-parameter-fifo cdrom) 2)))
              (queue-cdrom-interrupt
               cdrom
               (make-cdrom-interrupt
                :code #x3
                :action (lambda ()
-                               (log:info "Setloc action~%")
+                               (log:debug "Setloc action to: ~A~%" (cdrom-position cdrom))
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))))))
-           ; Stop
+           ; ReadN
+           (#x6
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x3
+               :action (lambda ()
+                               (log:debug "ReadN action~%")
+                               (setf (cdrom-read cdrom) t)
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))
+                               ; Sync the cdrom for the next interrupt once
+                               ; enough time has passed.
+                               (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
+                                 (funcall (cdrom-sync-callback cdrom)
+                                          (+ current-clock
+                                             (- (+ epoch (* 4000 2))
+                                                current-clock)))))))
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x1
+               :action (lambda ()
+                               (log:debug "ReadN action 2~%")
+                               ; (setf (cdrom-read cdrom) nil)
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))))))
+           Stop
            (#x8
              (queue-cdrom-interrupt
               cdrom
               (make-cdrom-interrupt
                :code #x3
                :action (lambda ()
-                               (log:info "Stop action~%")
+                               (log:debug "Stop action~%")
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))
-                               (queue-cdrom-interrupt
-                                cdrom
-                                (make-cdrom-interrupt
-                                 :code #x3
-                                 :action (lambda ()
-                                                 (log:info "Stop action 2~%")
-                                                 (setf (cdrom-response-fifo cdrom)
-                                                       (with-last (cdrom-response-fifo cdrom)
-                                                         (get-stat cdrom))))))
-
                                ; Sync the cdrom for the next interrupt once
                                ; enough time has passed.
-                               (let ((current-clock (funcall cdrom-system-clock-callback cdrom)))
+                               (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
                                  (funcall (cdrom-sync-callback cdrom)
                                           (+ current-clock
                                              (- (+ epoch (* 4000 2))
-                                                current-clock))))))))
+                                                current-clock)))))))
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x3
+               :action (lambda ()
+                               (log:debug "Stop action 2~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))))))
+           ; Init
+           (#xA
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x3
+               :action (lambda ()
+                               (log:debug "Init action~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))
+                               ; Sync the cdrom for the next interrupt once
+                               ; enough time has passed.
+                               (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
+                                 (funcall (cdrom-sync-callback cdrom)
+                                          (+ current-clock
+                                             (- (+ epoch (* 6000 2))
+                                                current-clock)))))))
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x2
+               :action (lambda ()
+                               (log:debug "Init action 2~%")
+                               (setf (cdrom-remaining-interrupts cdrom)
+                                     (empty-seq))
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))))))
            ; SetMode
            (#xE
              ; TODO(Samantha): Actually perform this action.
-             (log:warn "SetMode is currently not implemented, it's only a stub.")
+             ; (log:warn "SetMode is currently not implemented, it's only a stub.")
              (queue-cdrom-interrupt
               cdrom
               (make-cdrom-interrupt
                :code #x3
                :action (lambda ()
-                               (log:info "SetMode action~%")
-                               (setf (cdrom-seek cdrom) t)
+                               (log:debug "SetMode action~%")
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))
-                               (queue-cdrom-interrupt
-                                cdrom
-                                (make-cdrom-interrupt
-                                 :code #x2
-                                 :action (lambda ()
-                                                 (log:info "SetMode action 2~%")
-                                                 (setf (cdrom-response-fifo cdrom)
-                                                       (with-last (cdrom-response-fifo cdrom)
-                                                         (get-stat cdrom))))))
-
                                ; Sync the cdrom for the next interrupt once
                                ; enough time has passed.
                                (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
                                  (funcall (cdrom-sync-callback cdrom)
                                           (+ current-clock
-                                             (- (+ epoch (* 8000 2))
-                                                current-clock))))))))
+                                             (- (+ epoch (* 4000 2))
+                                                current-clock)))))))
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x2
+               :action (lambda ()
+                               (log:debug "SetMode action 2~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))))))
            ; SeekL
            (#x15
-             (log:warn "SeekL is currently not implemented, it's only a stub.")
+             ; (log:debug "SeekL is currently not implemented, it's only a stub.")
              (queue-cdrom-interrupt
               cdrom
               (make-cdrom-interrupt
                :code #x3
                :action (lambda ()
-                               (log:info "SeekL action~%")
+                               (log:debug "SeekL action~%")
                                (setf (cdrom-seek cdrom) t)
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))
-                               (queue-cdrom-interrupt
-                                cdrom
-                                (make-cdrom-interrupt
-                                 :code #x2
-                                 :action (lambda ()
-                                                 (log:info "SeekL action 2~%")
-                                                 (setf (cdrom-response-fifo cdrom)
-                                                       (with-last (cdrom-response-fifo cdrom)
-                                                         (get-stat cdrom))))))
-
                                ; Sync the cdrom for the next interrupt once
                                ; enough time has passed.
                                (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
                                  (funcall (cdrom-sync-callback cdrom)
                                           (+ current-clock
-                                             (- (+ epoch (* 8000 2))
-                                                current-clock))))))))
+                                             (- (+ epoch (* 6000 2))
+                                                current-clock)))))))
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x2
+               :action (lambda ()
+                               (setf (cdrom-seek cdrom) nil)
+                               (log:debug "SeekL action 2~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))))))
            ; GetID
            (#x1A
              (queue-cdrom-interrupt
@@ -294,27 +377,26 @@
               (make-cdrom-interrupt
                :code #x3
                :action (lambda ()
-                               (log:info "GetID action~%")
+                               (log:debug "GetID action~%")
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))
-                               (queue-cdrom-interrupt
-                                cdrom
-                                (make-cdrom-interrupt
-                                 :code #x2
-                                 :action (lambda ()
-                                                 (log:info "GetID action 2~%")
-                                                 (setf (cdrom-response-fifo cdrom)
-                                                       (concat (cdrom-response-fifo cdrom)
-                                                               (seq #x02 #x00 #x20 #x00 #x53 #x43 #x45 #x45))))))
-
                                ; Sync the cdrom for the next interrupt once
                                ; enough time has passed.
                                (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
                                  (funcall (cdrom-sync-callback cdrom)
                                           (+ current-clock
                                              (- (+ epoch (* 5000 2))
-                                                current-clock))))))))
+                                                current-clock)))))))
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x2
+               :action (lambda ()
+                               (log:debug "GetID action 2~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (concat (cdrom-response-fifo cdrom)
+                                             (seq #x02 #x00 #x20 #x00 #x53 #x43 #x45 #x41)))))))
            ; ReadTOC
            (#x1E
              (queue-cdrom-interrupt
@@ -322,26 +404,26 @@
               (make-cdrom-interrupt
                :code #x3
                :action (lambda ()
-                               (log:info "ReadTOC action~%")
+                               (log:debug "ReadTOC action~%")
                                (setf (cdrom-response-fifo cdrom)
                                      (with-last (cdrom-response-fifo cdrom)
                                        (get-stat cdrom)))
-                               (queue-cdrom-interrupt
-                                cdrom
-                                (make-cdrom-interrupt
-                                 :code #x2
-                                 :action (lambda ()
-                                                 (log:info "ReadTOC action 2~%")
-                                                 (setf (cdrom-response-fifo cdrom)
-                                                       (with-last (cdrom-response-fifo cdrom)
-                                                         (get-stat cdrom))))))
                                ; Sync the cdrom for the next interrupt once
                                ; enough time has passed.
                                (let ((current-clock (funcall (cdrom-system-clock-callback cdrom))))
                                  (funcall (cdrom-sync-callback cdrom)
                                           (+ current-clock
                                              (- (+ epoch 4000 400000)
-                                                current-clock))))))))
+                                                current-clock)))))))
+             (queue-cdrom-interrupt
+              cdrom
+              (make-cdrom-interrupt
+               :code #x2
+               :action (lambda ()
+                               (log:debug "ReadTOC action 2~%")
+                               (setf (cdrom-response-fifo cdrom)
+                                     (with-last (cdrom-response-fifo cdrom)
+                                       (get-stat cdrom)))))))
            ; Subfunctions
            (#x19
              (ecase (fset:first (cdrom-parameter-fifo cdrom))
@@ -352,14 +434,14 @@
                        (make-cdrom-interrupt
                         :code #x3
                         :action (lambda ()
-                                        (log:info "test subfunction-action~%")
+                                        (log:debug "test subfunction-action~%")
                                         (setf (cdrom-response-fifo cdrom)
                                               (seq #x97 #x01 #x10 #xC2))))))))))
 
   (setf (cdrom-parameter-fifo cdrom) (empty-seq))
   (funcall (cdrom-sync-callback cdrom)
            (+ (funcall (cdrom-system-clock-callback cdrom))
-              8000))
+              4000))
   (values))
 
 (declaim (ftype (function (cdrom (unsigned-byte 2))
@@ -399,5 +481,10 @@
   (declare (ignore clock))
   (unless (empty? (cdrom-remaining-interrupts cdrom))
     (process-interrupt cdrom (fset:first (cdrom-remaining-interrupts cdrom))))
+  (setf (cdrom-remaining-interrupts cdrom)
+        (less-first (cdrom-remaining-interrupts cdrom)))
+  (funcall (cdrom-sync-callback cdrom)
+           (+ (funcall (cdrom-system-clock-callback cdrom))
+              4000))
 
   (values))
