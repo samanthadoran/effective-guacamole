@@ -20,7 +20,7 @@
            #:+joypad-registers-begin+ #:+joypad-registers-size+
            #:write-word-to-byte-array #:write-half-word-to-byte-array
            #:read-word-from-byte-array #:read-half-word-from-byte-array
-           #:is-cacheable #:memory-segment +data-cache-begin+ +data-cache-size+))
+           #:is-cacheable #:memory-segment #:+data-cache-begin+ #:+data-cache-size+))
 
 (in-package :memory-constants)
 (declaim (optimize (speed 3) (safety 0)))

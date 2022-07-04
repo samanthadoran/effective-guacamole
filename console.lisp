@@ -26,11 +26,11 @@
   ; We already have a constant for this size, but using it here makes the
   ; macroexpander cry.
   (ram
-   (make-array #x200000 :element-type '(unsigned-byte 8) :initial-element 0)
-   :type (simple-array (unsigned-byte 8) (#x200000)))
+   (make-array +ram-size-non-mirrored+ :element-type '(unsigned-byte 8) :initial-element 0)
+   :type (simple-array (unsigned-byte 8) (#.+ram-size-non-mirrored+)))
   (data-cache
-   (make-array #x400 :element-type '(unsigned-byte 8) :initial-element 0)
-   :type (simple-array (unsigned-byte 8) (#x400))))
+   (make-array +data-cache-size+ :element-type '(unsigned-byte 8) :initial-element 0)
+   :type (simple-array (unsigned-byte 8) (#.+data-cache-size+))))
 
 (defun load-rom-from-file (filepath)
   (with-open-file (stream filepath :element-type '(unsigned-byte 8))
